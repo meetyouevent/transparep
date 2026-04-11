@@ -15,8 +15,8 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
 // ─── APIs publiques ─────────────────────────────────────
 const DGFIP_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/balances-comptables-des-communes-en-2023/records';
-const DECP_URL  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp_augmente/records';
-const SUBV_URL  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/subventions-versees-aux-associations/records';
+const DECP_URL  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-2022-marches-valides/records';
+const SUBV_URL  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/dispositif-de-subventions-aux-associations/records';
 const GEO_URL   = 'https://geo.api.gouv.fr/communes';
 
 // ─── Chapitres comptables M14 ───────────────────────────
@@ -53,16 +53,22 @@ module.exports = async (req, res) => {
       .eq('insee', insee)
       .single();
 
-    if (cached && (Date.now() - new Date(cached.cached_at).getTime()) < TTL_MS) {
+    if (cached && cached.data.budget_total > 0 && (Date.now() - new Date(cached.cached_at).getTime()) < TTL_MS) {
       return res.status(200).json(cached.data);
     }
 
-    // ── 2. Cache miss → fetch les 3 APIs en parallèle ──
-    const [geoInfo, balances, marches, subventions] = await Promise.all([
-      fetchGeo(insee),
-      fetchBalances(insee),
-      fetchMarches(insee),
-      fetchSubventions(insee),
+    // ── 2. Cache miss → fetch geo d'abord (on a besoin du nom) ──
+    const geoInfo = await fetchGeo(insee);
+    const nomCommune = geoInfo.nom || '';
+
+    // SIRET commune = "2" + dept(3) + commune(5 sans dept) + "00018" (siège)
+    // Ex: Cambrai 59122 → siren 215901224, ident 21590122400018
+    const ident = geoInfo.siren ? geoInfo.siren + '00018' : `2${insee}00018`.replace(/^2(\d{2})(\d{3})/, '2$1$2');
+
+    const [balances, marches, subventions] = await Promise.all([
+      fetchBalances(nomCommune),
+      fetchMarches(ident, nomCommune),
+      fetchSubventions(nomCommune),
     ]);
 
     // ── 3. Agrégation ───────────────────────────────────
@@ -88,17 +94,17 @@ module.exports = async (req, res) => {
 // ═════════════════════════════════════════════════════════
 
 async function fetchGeo(insee) {
-  const r = await fetch(`${GEO_URL}/${insee}?fields=nom,population,codeDepartement,codesPostaux`);
+  const r = await fetch(`${GEO_URL}/${insee}?fields=nom,population,codeDepartement,codesPostaux,siren`);
   if (!r.ok) throw new Error(`geo.api.gouv.fr ${r.status}`);
   return r.json();
 }
 
-async function fetchBalances(insee) {
-  // Balances comptables DGFIP — dépenses (sd=D) agrégées par chapitre
+async function fetchBalances(nomCommune) {
+  // Balances comptables DGFIP — le champ "insee" du dataset est tronqué,
+  // on filtre par lbudg (nom commune) + budget principal (cbudg=1)
   const params = new URLSearchParams({
-    where: `insee = "${insee}" AND cbudg = "1"`,
-    group_by: 'compte',
-    select: 'compte, SUM(sd) as total_sd, SUM(sc) as total_sc',
+    where: `lbudg = "${nomCommune.toUpperCase()}" AND cbudg = "1"`,
+    select: 'compte, sd, sc',
     limit: '200',
   });
   const r = await fetch(`${DGFIP_URL}?${params}`);
@@ -107,11 +113,12 @@ async function fetchBalances(insee) {
   return json.results || [];
 }
 
-async function fetchMarches(insee) {
+async function fetchMarches(ident, nomCommune) {
+  // DECP: acheteur_id = SIRET commune
   const params = new URLSearchParams({
-    where: `codeCommuneAcheteur = "${insee}"`,
-    select: 'id, objet, titulaires, montant, datePublicationDonnees, nature, procedure',
-    order_by: 'datePublicationDonnees DESC',
+    where: `acheteur_id = "${ident}"`,
+    select: 'id, objet, montant, datepublicationdonnees, procedure',
+    order_by: 'datepublicationdonnees DESC',
     limit: '50',
   });
   const r = await fetch(`${DECP_URL}?${params}`);
@@ -120,17 +127,20 @@ async function fetchMarches(insee) {
   return json.results || [];
 }
 
-async function fetchSubventions(insee) {
-  const params = new URLSearchParams({
-    where: `codeCommune = "${insee}"`,
-    select: 'nomBeneficiaire, objetSubvention, montant, dateConvention',
-    order_by: 'dateConvention DESC',
-    limit: '50',
-  });
-  const r = await fetch(`${SUBV_URL}?${params}`);
-  if (!r.ok) return [];
-  const json = await r.json();
-  return json.results || [];
+async function fetchSubventions(nomCommune) {
+  // Subventions: dataset peut ne pas exister ou être indisponible
+  try {
+    const params = new URLSearchParams({
+      where: `nom_attribuant LIKE "${nomCommune.toUpperCase()}"`,
+      select: 'nom_beneficiaire, objet, montant, date_convention',
+      order_by: 'date_convention DESC',
+      limit: '50',
+    });
+    const r = await fetch(`${SUBV_URL}?${params}`);
+    if (!r.ok) return [];
+    const json = await r.json();
+    return json.results || [];
+  } catch { return []; }
 }
 
 // ═════════════════════════════════════════════════════════
@@ -154,7 +164,7 @@ function aggregate(insee, geo, balances, marches, subventions) {
     }
     if (!chap) continue;
 
-    const depense = Math.abs(Number(row.total_sd || 0));
+    const depense = Math.abs(Number(row.sd || row.total_sd || 0));
     if (!chapitres[chap]) {
       chapitres[chap] = { lib: CHAPITRES_LIB[chap] || `Chapitre ${chap}`, depense: 0 };
     }
@@ -163,30 +173,21 @@ function aggregate(insee, geo, balances, marches, subventions) {
   }
 
   // ── Marchés publics ───────────────────────────────────
-  const marchesClean = marches.map(m => {
-    let attributaire = '';
-    if (m.titulaires) {
-      try {
-        const t = typeof m.titulaires === 'string' ? JSON.parse(m.titulaires) : m.titulaires;
-        attributaire = Array.isArray(t) ? t.map(x => x.denominationSociale || '').join(', ') : '';
-      } catch { attributaire = String(m.titulaires); }
-    }
-    return {
-      ref: m.id || '',
-      objet: m.objet || '',
-      attributaire,
-      montant: Number(m.montant) || 0,
-      date: m.datePublicationDonnees || '',
-      procedure: m.procedure || m.nature || '',
-    };
-  });
+  const marchesClean = marches.map(m => ({
+    ref: m.id || '',
+    objet: m.objet || '',
+    attributaire: '',
+    montant: Number(m.montant) || 0,
+    date: m.datepublicationdonnees || '',
+    procedure: m.procedure || '',
+  }));
 
   // ── Subventions ───────────────────────────────────────
   const subvClean = subventions.map(s => ({
-    beneficiaire: s.nomBeneficiaire || '',
-    objet: s.objetSubvention || '',
+    beneficiaire: s.nom_beneficiaire || '',
+    objet: s.objet || '',
     montant: Number(s.montant) || 0,
-    annee: s.dateConvention ? new Date(s.dateConvention).getFullYear() : null,
+    annee: s.date_convention ? new Date(s.date_convention).getFullYear() : null,
   }));
 
   // ── KPIs ──────────────────────────────────────────────
