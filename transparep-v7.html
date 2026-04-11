@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>TranspaRép</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300;1,9..144,600&family=Cabinet+Grotesk:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap');
+
+/* ═══════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════ */
+:root {
+  --ink:    #06101d;
+  --deep:   #091525;
+  --mid:    #0e2040;
+  --lift:   #152e58;
+  --glass:  rgba(14,32,64,0.7);
+  --rim:    rgba(255,255,255,0.08);
+  --rim+:   rgba(255,255,255,0.14);
+  --text:   #e6eeff;
+  --soft:   rgba(230,238,255,0.5);
+  --ghost:  rgba(230,238,255,0.22);
+  --gold:   #f0b429;
+  --gold+:  #ffd166;
+  --ember:  #ff6b6b;
+  --sage:   #3ecf8e;
+  --sky:    #5b9cf6;
+  --peach:  #ff8c5a;
+
+  /* Palette — each slice category */
+  --c1:#e05c5c; --c2:#e8874d; --c3:#d4a017; --c4:#7eb87e; --c5:#4a90d9; --c6:#9b72cf; --c7:#5fb8b0;
+}
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html{background:var(--ink);height:100%;}
+body{
+  font-family:'Cabinet Grotesk',sans-serif;
+  background:var(--ink);color:var(--text);
+  height:100svh;display:flex;flex-direction:column;
+  overflow:hidden;
+}
+
+/* ═══════════════════════════════════════════
+   AMBIENT BACKGROUND — always visible
+═══════════════════════════════════════════ */
+.amb{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% 40%, rgba(91,156,246,0.07) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 40% at 15% 85%, rgba(240,180,41,0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 35% at 88% 12%, rgba(62,207,142,0.04) 0%, transparent 50%);
+  animation:amb-drift 18s ease-in-out infinite alternate;
+}
+@keyframes amb-drift{
+  0%{opacity:.8;transform:scale(1);}
+  100%{opacity:1;transform:scale(1.06) translate(1%,1%);}
+}
+
+/* ═══════════════════════════════════════════
+   TOP BAR — ultra minimal, floating
+═══════════════════════════════════════════ */
+.topbar{
+  position:relative;z-index:50;
+  padding:env(safe-area-inset-top,0px) 20px 0;
+  display:flex;align-items:center;gap:12px;
+  height:calc(54px + env(safe-area-inset-top,0px));
+  flex-shrink:0;
+}
+.wordmark{
+  font-family:'Fraunces',serif;
+  font-size:1.15rem;font-weight:600;
+  font-style:italic;letter-spacing:-0.01em;
+  color:var(--text);flex-shrink:0;
+  cursor:pointer;
+  transition:opacity .2s;
+}
+.wordmark:active{opacity:.6;}
+.wordmark em{color:var(--gold);font-style:normal;}
+
+/* Search pill — expands on tap */
+.search-pill{
+  flex:1;position:relative;
+}
+.sp-btn{
+  width:100%;height:38px;
+  background:var(--glass);
+  border:1px solid var(--rim+);
+  border-radius:19px;
+  backdrop-filter:blur(20px) saturate(180%);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  display:flex;align-items:center;gap:8px;
+  padding:0 14px;cursor:pointer;
+  transition:all .25s cubic-bezier(0.34,1.2,0.64,1);
+}
+.sp-btn:hover{border-color:rgba(240,180,41,0.35);background:rgba(14,32,64,0.85);}
+.sp-btn:active{transform:scale(0.97);}
+.sp-icon{font-size:0.8rem;opacity:.5;flex-shrink:0;}
+.sp-label{
+  flex:1;font-size:0.8rem;font-weight:500;
+  color:var(--ghost);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.sp-label.has-city{color:var(--text);font-weight:700;}
+.sp-dept{
+  font-family:'DM Mono',monospace;font-size:0.62rem;
+  color:var(--gold);flex-shrink:0;
+  background:rgba(240,180,41,0.12);
+  border-radius:10px;padding:2px 7px;
+}
+
+/* Alert badge */
+.alert-badge{
+  flex-shrink:0;
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,107,107,0.15);
+  border:1px solid rgba(255,107,107,0.3);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;
+  position:relative;
+}
+.alert-badge:hover{background:rgba(255,107,107,0.25);}
+.alert-badge:active{transform:scale(.92);}
+.alert-badge-num{
+  font-family:'DM Mono',monospace;
+  font-size:0.65rem;font-weight:700;color:#ff9090;
+}
+.alert-dot{
+  position:absolute;top:5px;right:5px;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--ember);
+  box-shadow:0 0 6px var(--ember);
+  animation:pulse-dot 1.8s ease-in-out infinite;
+}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.6);}}
+
+/* ═══════════════════════════════════════════
+   SEARCH OVERLAY — full screen modal
+═══════════════════════════════════════════ */
+.search-overlay{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(6,16,29,0.96);
+  backdrop-filter:blur(32px) saturate(200%);
+  -webkit-backdrop-filter:blur(32px) saturate(200%);
+  display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top,20px) 20px 20px;
+  opacity:0;pointer-events:none;
+  transition:opacity .25s;
+}
+.search-overlay.open{opacity:1;pointer-events:all;}
+
+.so-top{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:20px;
+  margin-top:calc(env(safe-area-inset-top,0px) + 8px);
+}
+.so-input-wrap{
+  flex:1;position:relative;
+  display:flex;align-items:center;
+  background:var(--mid);
+  border:1.5px solid rgba(240,180,41,0.35);
+  border-radius:16px;padding:0 14px;gap:10px;
+  height:48px;
+  box-shadow:0 0 0 4px rgba(240,180,41,0.08);
+}
+.so-input{
+  flex:1;background:none;border:none;outline:none;
+  font-family:'Cabinet Grotesk',sans-serif;
+  font-size:1rem;font-weight:600;color:var(--text);
+  caret-color:var(--gold);
+}
+.so-input::placeholder{color:var(--ghost);font-weight:400;}
+.so-clear{
+  background:none;border:none;color:var(--ghost);
+  font-size:1.1rem;cursor:pointer;padding:0;
+  opacity:0;transition:opacity .15s;flex-shrink:0;
+}
+.so-clear.vis{opacity:1;}
+.so-cancel{
+  flex-shrink:0;font-size:0.85rem;font-weight:700;
+  color:var(--gold);cursor:pointer;padding:4px;
+  transition:opacity .15s;white-space:nowrap;
+}
+.so-cancel:active{opacity:.6;}
+
+/* Results area */
+.so-results{
+  flex:1;overflow-y:auto;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.so-results::-webkit-scrollbar{display:none;}
+
+.so-section-head{
+  font-size:0.62rem;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ghost);
+  padding:0 4px 10px;margin-top:16px;
+}
+.so-section-head:first-child{margin-top:4px;}
+
+.so-item{
+  display:flex;align-items:center;gap:14px;
+  padding:13px 12px;border-radius:14px;
+  cursor:pointer;transition:background .12s;
+  margin-bottom:2px;
+}
+.so-item:active{background:rgba(240,180,41,0.08);}
+.so-item.focused{background:rgba(240,180,41,0.07);}
+
+.si-icon{
+  width:40px;height:40px;border-radius:12px;
+  background:var(--mid);border:1px solid var(--rim);
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.1rem;flex-shrink:0;
+}
+.si-body{flex:1;min-width:0;}
+.si-name{
+  font-size:0.92rem;font-weight:700;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.si-name mark{
+  background:none;color:var(--gold);
+  font-weight:800;
+}
+.si-sub{
+  font-family:'DM Mono',monospace;
+  font-size:0.62rem;color:var(--soft);margin-top:2px;
+}
+.si-pop{
+  flex-shrink:0;font-family:'DM Mono',monospace;
+  font-size:0.65rem;color:var(--ghost);text-align:right;
+}
+.si-arr{flex-shrink:0;color:var(--ghost);font-size:0.75rem;margin-left:4px;}
+
+.so-loader{
+  display:flex;align-items:center;gap:12px;
+  padding:20px 12px;color:var(--ghost);font-size:0.85rem;
+}
+.so-empty{
+  padding:40px 16px;text-align:center;
+  color:var(--ghost);font-size:0.88rem;line-height:1.6;
+}
+
+/* ═══════════════════════════════════════════
+   MAIN CHART AREA
+═══════════════════════════════════════════ */
+.chart-area{
+  position:relative;z-index:1;
+  flex:1;display:flex;flex-direction:column;
+  overflow:hidden;min-height:0;
+}
+
+/* Level label — floats above pie */
+.level-float{
+  position:absolute;top:0;left:0;right:0;
+  padding:6px 20px;
+  display:flex;align-items:center;gap:8px;
+  z-index:10;pointer-events:none;
+}
+.lf-tag{
+  font-family:'DM Mono',monospace;
+  font-size:0.58rem;font-weight:500;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ghost);
+  background:var(--glass);
+  border:1px solid var(--rim);
+  border-radius:20px;padding:3px 10px;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.lf-name{
+  font-family:'Fraunces',serif;
+  font-size:0.95rem;font-weight:600;font-style:italic;
+  color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  flex:1;
+}
+
+/* Breadcrumb — also floating */
+.bc-float{
+  position:absolute;top:32px;left:0;right:0;
+  padding:4px 20px;
+  display:flex;align-items:center;gap:5px;
+  z-index:10;pointer-events:all;
+  flex-wrap:wrap;
+}
+.bc-crumb{
+  font-size:0.68rem;font-weight:500;color:var(--ghost);
+  cursor:pointer;padding:2px 5px;border-radius:6px;
+  transition:color .15s;
+}
+.bc-crumb:hover{color:var(--text);}
+.bc-crumb.now{color:var(--gold);font-weight:700;cursor:default;}
+.bc-sep{color:var(--rim+);font-size:0.75rem;}
+
+/* PIE canvas — fills everything */
+.pie-field{
+  flex:1;min-height:0;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+canvas#pie{
+  display:block;cursor:pointer;
+  touch-action:manipulation;
+  background:transparent;
+}
+
+/* Back button */
+.back-btn{
+  position:absolute;left:16px;
+  top:50%;transform:translateY(-50%);
+  width:42px;height:42px;border-radius:50%;
+  background:var(--glass);
+  border:1px solid var(--rim+);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:all .25s cubic-bezier(0.34,1.4,0.64,1);
+  opacity:0;pointer-events:none;z-index:10;
+}
+.back-btn.on{opacity:1;pointer-events:all;}
+.back-btn:hover{background:var(--mid);border-color:var(--rim+);transform:translateY(-50%) scale(1.08);}
+.back-btn:active{transform:translateY(-50%) scale(.93);}
+.back-btn svg{width:18px;height:18px;fill:none;stroke:var(--text);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+
+/* Donut center */
+.donut-center{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  text-align:center;pointer-events:none;z-index:5;
+  transition:all .3s;
+}
+.dc-city{
+  font-family:'DM Mono',monospace;
+  font-size:0.58rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ghost);margin-bottom:2px;
+  transition:all .3s;
+}
+.dc-amount{
+  font-family:'Fraunces',serif;
+  font-size:clamp(1.1rem,6.5vw,1.8rem);
+  font-weight:300;font-style:italic;
+  color:var(--text);line-height:1;
+  transition:all .3s;
+}
+.dc-amount strong{font-weight:600;color:var(--gold);}
+.dc-sub{
+  font-size:0.6rem;color:var(--ghost);margin-top:3px;
+  font-family:'DM Mono',monospace;
+}
+
+/* ═══════════════════════════════════════════
+   ITEMS STRIP — slides up from bottom
+═══════════════════════════════════════════ */
+.items-strip{
+  position:relative;z-index:10;
+  flex-shrink:0;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+
+/* Anomaly bar */
+.anom-bar{
+  margin:0 16px 8px;
+  background:rgba(255,107,107,0.1);
+  border:1px solid rgba(255,107,107,0.25);
+  border-radius:14px;padding:10px 14px;
+  display:none;align-items:center;gap:10px;
+  cursor:pointer;transition:all .18s;
+}
+.anom-bar.vis{display:flex;}
+.anom-bar:active{transform:scale(.98);}
+.anom-bar-l{flex:1;}
+.anom-bar-title{font-size:0.85rem;font-weight:700;color:#ff9090;}
+.anom-bar-sub{font-size:0.67rem;color:var(--soft);margin-top:1px;}
+.anom-bar-cta{
+  background:var(--ember);color:#fff;
+  font-size:0.68rem;font-weight:700;
+  padding:5px 12px;border-radius:20px;
+  white-space:nowrap;flex-shrink:0;
+}
+
+/* Scroll container for items */
+.items-scroll{
+  display:flex;gap:10px;
+  overflow-x:auto;padding:0 16px 16px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  scroll-snap-type:x mandatory;
+}
+.items-scroll::-webkit-scrollbar{display:none;}
+
+/* Each item card */
+.icard{
+  flex-shrink:0;
+  width:clamp(140px,38vw,175px);
+  background:var(--glass);
+  border:1px solid var(--rim);
+  border-radius:18px;
+  padding:14px 14px 12px;
+  cursor:pointer;
+  scroll-snap-align:start;
+  transition:all .2s cubic-bezier(0.34,1.2,0.64,1);
+  backdrop-filter:blur(20px) saturate(160%);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);
+  position:relative;overflow:hidden;
+}
+.icard::before{
+  content:'';position:absolute;inset:0;border-radius:18px;
+  background:linear-gradient(135deg,rgba(255,255,255,0.04) 0%,transparent 60%);
+  pointer-events:none;
+}
+.icard:active{transform:scale(.95);}
+.icard.anomaly{border-color:rgba(255,107,107,0.3);background:rgba(255,107,107,0.06);}
+
+/* Color stripe top */
+.icard-stripe{
+  height:3px;border-radius:2px;
+  margin-bottom:10px;
+  background:var(--color,#fff);
+  opacity:.7;
+}
+.icard-icon{font-size:1.2rem;margin-bottom:8px;display:block;}
+.icard-name{
+  font-size:0.78rem;font-weight:700;color:var(--text);
+  line-height:1.3;
+  /* 2 lines max */
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  min-height:2.2em;
+  margin-bottom:8px;
+}
+.icard-pct{
+  font-family:'Fraunces',serif;
+  font-size:1.4rem;font-weight:600;font-style:italic;
+  color:var(--text);line-height:1;
+}
+.icard-amt{
+  font-family:'DM Mono',monospace;
+  font-size:0.6rem;color:var(--soft);margin-top:2px;
+}
+.icard-badge{
+  position:absolute;top:10px;right:10px;
+  font-size:0.68rem;
+}
+.icard-drill{
+  position:absolute;bottom:10px;right:10px;
+  color:var(--ghost);font-size:0.7rem;
+}
+
+/* ═══════════════════════════════════════════
+   DRAWER — bottom sheet
+═══════════════════════════════════════════ */
+.drawer{
+  position:fixed;left:0;right:0;bottom:0;z-index:100;
+  background:var(--deep);
+  border-top:1px solid rgba(240,180,41,0.3);
+  border-radius:22px 22px 0 0;
+  transform:translateY(100%);
+  transition:transform .42s cubic-bezier(0.22,1,0.36,1);
+  max-height:78svh;display:flex;flex-direction:column;
+  box-shadow:0 -24px 80px rgba(0,0,0,.75);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.drawer.on{transform:translateY(0);}
+
+.drw-handle{
+  width:36px;height:4px;border-radius:2px;
+  background:var(--rim+);margin:12px auto 0;flex-shrink:0;
+}
+.drw-head{
+  flex-shrink:0;padding:12px 20px 10px;
+  display:flex;align-items:center;gap:10px;
+}
+.drw-color{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.drw-title{
+  font-family:'Fraunces',serif;font-style:italic;
+  font-size:1rem;font-weight:600;flex:1;color:var(--text);
+}
+.drw-amt{
+  font-family:'DM Mono',monospace;font-size:0.8rem;
+  color:var(--gold);flex-shrink:0;
+}
+.drw-x{
+  background:none;border:none;color:var(--ghost);
+  font-size:1.4rem;cursor:pointer;padding:0;
+  width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;transition:background .15s;
+}
+.drw-x:hover{background:var(--mid);}
+
+.drw-tabs{
+  flex-shrink:0;display:flex;border-bottom:1px solid var(--rim);
+  padding:0 20px;overflow-x:auto;scrollbar-width:none;
+}
+.drw-tabs::-webkit-scrollbar{display:none;}
+.dtab{
+  font-size:0.63rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:9px 14px;cursor:pointer;color:var(--ghost);
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  transition:all .15s;white-space:nowrap;flex-shrink:0;
+}
+.dtab.on{color:var(--gold);border-bottom-color:var(--gold);}
+
+.drw-body{
+  flex:1;overflow-y:auto;padding:18px 20px 24px;
+  scrollbar-width:thin;scrollbar-color:var(--rim) transparent;
+}
+.drw-body::-webkit-scrollbar{width:2px;}
+.drw-body::-webkit-scrollbar-thumb{background:var(--rim+);border-radius:2px;}
+.dtc{display:none;}.dtc.on{display:block;}
+
+/* Alert block */
+.alert-blk{
+  background:rgba(255,107,107,0.08);
+  border:1px solid rgba(255,107,107,0.22);
+  border-radius:14px;padding:14px;margin-bottom:16px;
+  display:flex;gap:12px;
+}
+.ab-ico{font-size:1.1rem;flex-shrink:0;margin-top:1px;}
+.ab-body{flex:1;}
+.ab-title{font-size:0.85rem;font-weight:700;color:#ff9090;margin-bottom:4px;}
+.ab-text{font-size:0.77rem;line-height:1.6;color:var(--soft);}
+.ab-cta{
+  margin-top:8px;font-size:0.7rem;
+  color:var(--gold);font-weight:600;
+  border-left:2px solid var(--gold);padding-left:8px;
+}
+
+/* Invoice rows */
+.inv-row{
+  background:var(--mid);border:1px solid var(--rim);
+  border-radius:12px;padding:12px;margin-bottom:8px;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.inv-row.al{border-color:rgba(255,107,107,.3);background:rgba(255,107,107,.05);}
+.inv-row.wn{border-color:rgba(255,140,90,.25);background:rgba(255,140,90,.04);}
+.inv-num{font-family:'DM Mono',monospace;font-size:.58rem;color:var(--ghost);flex-shrink:0;min-width:78px;padding-top:1px;}
+.inv-info{flex:1;min-width:0;}
+.inv-desc{font-size:.8rem;font-weight:600;color:var(--text);}
+.inv-sup{font-size:.66rem;color:var(--soft);margin-top:2px;}
+.inv-note{font-size:.65rem;margin-top:4px;}
+.inv-note.r{color:#ff9090;}.inv-note.a{color:var(--peach);}
+.inv-amt{font-family:'DM Mono',monospace;font-size:.78rem;font-weight:500;flex-shrink:0;color:var(--text);}
+
+/* Person cards */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+.pcard{
+  background:var(--mid);border:1px solid var(--rim);
+  border-radius:14px;padding:14px;
+}
+.pcard.al{border-color:rgba(255,107,107,.3);}
+.pc-role{font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ghost);margin-bottom:4px;}
+.pc-name{font-size:.82rem;font-weight:700;margin-bottom:7px;color:var(--text);}
+.pc-sal{font-family:'DM Mono',monospace;font-size:.95rem;color:var(--gold);}
+.pc-net{font-size:.62rem;color:var(--soft);margin-top:2px;}
+.pc-base{font-size:.6rem;color:var(--ghost);margin-top:5px;font-family:'DM Mono',monospace;}
+.pc-note{font-size:.62rem;margin-top:4px;color:#ff9090;}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:.78rem;}
+.tbl th{font-size:.56rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ghost);text-align:left;padding:6px 8px;border-bottom:1px solid var(--rim);font-weight:600;}
+.tbl td{padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.03);}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl .r{text-align:right;font-family:'DM Mono',monospace;font-size:.74rem;}
+.bdg{font-size:.58rem;font-weight:700;padding:2px 8px;border-radius:20px;}
+.bdg-r{background:rgba(255,107,107,.14);color:#ff9090;}
+.bdg-g{background:rgba(62,207,142,.1);color:var(--sage);}
+
+/* Anomaly card in drawer */
+.ac{background:var(--mid);border:1px solid var(--rim);border-radius:14px;overflow:hidden;margin-bottom:10px;}
+.ac-head{padding:11px 14px;display:flex;align-items:center;gap:9px;font-size:.82rem;font-weight:700;}
+.ac-head.h{background:rgba(255,107,107,.08);border-bottom:1px solid rgba(255,107,107,.12);}
+.ac-head.m{background:rgba(255,140,90,.06);border-bottom:1px solid rgba(255,140,90,.1);}
+.ac-tag{font-size:.57rem;font-weight:800;padding:2px 8px;border-radius:20px;flex-shrink:0;}
+.ac-tag.h{background:var(--ember);color:#fff;}
+.ac-tag.m{background:var(--peach);color:var(--ink);}
+.ac-body{padding:10px 14px;font-size:.77rem;line-height:1.65;color:var(--soft);}
+.ac-action{padding:9px 14px;border-top:1px solid var(--rim);font-size:.7rem;color:var(--gold);display:flex;gap:6px;background:rgba(240,180,41,.04);}
+.ac-action::before{content:'→';}
+
+/* Question item */
+.qi{background:var(--mid);border:1px solid var(--rim);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
+.qi-tag{font-size:.58rem;font-weight:700;letter-spacing:.08em;color:var(--ember);margin-bottom:5px;}
+.qi-q{font-size:.8rem;color:var(--text);line-height:1.55;font-style:italic;border-left:2px solid var(--gold);padding-left:10px;}
+.qi-btn{margin-top:8px;background:none;border:1px solid var(--rim+);color:var(--soft);font-size:.62rem;font-weight:700;padding:5px 13px;border-radius:20px;cursor:pointer;transition:all .15s;}
+.qi-btn:hover{background:var(--gold);color:var(--ink);border-color:var(--gold);}
+
+/* AI */
+.aib{background:var(--mid);border:1px solid var(--rim);border-radius:14px;overflow:hidden;}
+.aib-h{padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--rim);}
+.aib-h span{font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ghost);}
+.aib-tag{background:rgba(255,107,107,.18);color:var(--ember);border:1px solid rgba(255,107,107,.25);font-size:.57rem;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:auto;}
+.aib-body{padding:14px;font-size:.8rem;line-height:1.7;}
+.ai-v{border-left:3px solid var(--sage);background:rgba(62,207,142,.06);border-radius:0 8px 8px 0;padding:9px 12px;margin:7px 0;}
+.ai-w{border-left:3px solid var(--peach);background:rgba(255,140,90,.06);border-radius:0 8px 8px 0;padding:9px 12px;margin:7px 0;}
+.ai-q{border-left:3px solid var(--gold);background:rgba(240,180,41,.06);border-radius:0 8px 8px 0;padding:9px 12px;margin:7px 0;}
+.aib-acts{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--rim);flex-wrap:wrap;}
+.ai-btn{background:var(--lift);border:1px solid var(--rim+);color:var(--soft);font-size:.62rem;font-weight:600;padding:6px 13px;border-radius:20px;cursor:pointer;transition:all .15s;}
+.ai-btn:hover{background:var(--mid);color:var(--text);}
+.ai-btn.d{border-color:rgba(255,107,107,.3);color:#ff9090;}
+
+/* Dots loader */
+.dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--gold);margin-right:3px;animation:db 1.2s ease-in-out infinite;}
+.dots span:nth-child(2){animation-delay:.2s;}.dots span:nth-child(3){animation-delay:.4s;}
+@keyframes db{0%,80%,100%{transform:scale(.55);opacity:.25;}40%{transform:scale(1);opacity:1;}}
+
+/* Loading overlay — over pie */
+.loading-overlay{
+  position:absolute;inset:0;z-index:20;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+  background:rgba(6,16,29,.75);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  border-radius:12px;opacity:0;pointer-events:none;transition:opacity .3s;
+}
+.loading-overlay.on{opacity:1;pointer-events:all;}
+.loading-overlay .lo-text{font-size:.8rem;color:var(--soft);font-weight:600;}
+.loading-overlay .lo-err{color:var(--ember);font-size:.75rem;text-align:center;max-width:80%;}
+
+/* Overlay */
+.overlay{position:fixed;inset:0;background:rgba(6,16,29,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:90;opacity:0;pointer-events:none;transition:opacity .3s;}
+.overlay.on{opacity:1;pointer-events:all;}
+
+/* Toast */
+#toast{
+  position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 90px);
+  left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--mid);border:1px solid var(--rim+);
+  border-radius:24px;padding:9px 18px;
+  font-size:.75rem;font-weight:600;color:var(--soft);
+  z-index:300;opacity:0;
+  transition:transform .35s cubic-bezier(.34,1.56,.64,1),opacity .25s;
+  white-space:nowrap;pointer-events:none;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="amb"></div>
+
+<!-- ══ TOP BAR ════════════════════════════════ -->
+<div class="topbar">
+  <div class="wordmark" onclick="onLogoTap()">Transpa<em>Rép</em></div>
+
+  <div class="search-pill">
+    <div class="sp-btn" onclick="openSearch()">
+      <span class="sp-icon">⌕</span>
+      <span class="sp-label" id="sp-label">Rechercher une commune…</span>
+      <span class="sp-dept" id="sp-dept" style="display:none"></span>
+    </div>
+  </div>
+
+  <div class="alert-badge" id="alert-badge" onclick="openAllAnomalies()" style="display:none">
+    <div class="alert-badge-num" id="alert-num">5</div>
+    <div class="alert-dot"></div>
+  </div>
+</div>
+
+<!-- ══ MAIN CHART ═════════════════════════════ -->
+<div class="chart-area">
+  <!-- Floating level info -->
+  <div class="level-float">
+    <div class="lf-tag" id="lf-tag">Budget communal</div>
+    <div class="lf-name" id="lf-name" style="display:none"></div>
+  </div>
+  <div class="bc-float" id="bc-float"></div>
+
+  <!-- Back button -->
+  <div class="back-btn" id="back-btn" onclick="goBack()">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+
+  <!-- THE PIE -->
+  <div class="pie-field" id="pie-field">
+    <div class="loading-overlay" id="loading-overlay">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="lo-text" id="lo-text">Chargement des données DGFIP…</div>
+    </div>
+    <canvas id="pie"></canvas>
+    <div class="donut-center" id="donut-center">
+      <div class="dc-city" id="dc-city">TranspaRép</div>
+      <div class="dc-amount" id="dc-amount">
+        Où va <strong>votre argent</strong> ?
+      </div>
+      <div class="dc-sub" id="dc-sub">Tapez une commune pour commencer</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ITEMS STRIP ════════════════════════════ -->
+<div class="items-strip" id="items-strip">
+  <div class="anom-bar" id="anom-bar" onclick="openAllAnomalies()">
+    <div class="anom-bar-l">
+      <div class="anom-bar-title">🚨 <span id="anom-count">2</span> anomalies à ce niveau</div>
+      <div class="anom-bar-sub">Questions prêtes pour votre prochain CM</div>
+    </div>
+    <div class="anom-bar-cta">Voir →</div>
+  </div>
+  <div class="items-scroll" id="items-scroll"></div>
+</div>
+
+<!-- ══ SEARCH OVERLAY ════════════════════════ -->
+<div class="search-overlay" id="search-overlay">
+  <div class="so-top">
+    <div class="so-input-wrap">
+      <span style="font-size:.9rem;opacity:.4;flex-shrink:0">⌕</span>
+      <input class="so-input" id="so-input"
+        type="text" autocomplete="off" spellcheck="false"
+        placeholder="Nom de votre commune…"
+        inputmode="search" enterkeyhint="search"/>
+      <button class="so-clear" id="so-clear" onclick="clearSO()">×</button>
+    </div>
+    <div class="so-cancel" onclick="closeSearch()">Annuler</div>
+  </div>
+  <div class="so-results" id="so-results"></div>
+</div>
+
+<!-- ══ OVERLAY ════════════════════════════════ -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+
+<!-- ══ DRAWER ════════════════════════════════ -->
+<div class="drawer" id="drawer">
+  <div class="drw-handle"></div>
+  <div class="drw-head">
+    <div class="drw-color" id="drw-color"></div>
+    <div class="drw-title" id="drw-title">Détail</div>
+    <div class="drw-amt" id="drw-amt"></div>
+    <button class="drw-x" onclick="closeDrawer()">×</button>
+  </div>
+  <div class="drw-tabs" id="drw-tabs"></div>
+  <div class="drw-body" id="drw-body"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  PALETTE & ICONS
+// ═══════════════════════════════════════════
+const COLORS = ['#e05c5c','#e8874d','#d4a017','#5fa86e','#4a8fd4','#8a6bc4','#4aada6','#c46b8a','#7ab0d4','#d4a06b'];
+const ICONS = {
+  'Charges de personnel':'👥','Charges générales':'🛒',
+  'Subventions':'🤝','Investissement':'🏗️',
+  'Charge de la dette':'💳','Charges exceptionnelles':'⚠️',
+  'Direction & cabinet':'🏛️','Services techniques':'🔧',
+  'Éducation & petite enfance':'📚','Police municipale':'👮',
+  'Administration générale':'📋','Sport (clubs)':'⚽',
+  'Culture & événements':'🎭','Social & solidarité':'❤️',
+  'Réfection voirie (17 rues)':'🛣️','Rénovation école Pasteur':'🏫',
+};
+const ico = l => ICONS[l] || '📌';
+
+// ═══════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════
+const fmt = n => n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' M€':n>=1e3?Math.round(n/1e3)+'k€':n+'€';
+const fmtPop = n => !n?'':n>=1e6?(n/1e6).toFixed(1)+'M hab.':n>=1e3?Math.round(n/1e3)+'k hab.':n+' hab.';
+function cityEmoji(pop){
+  if(pop>500000)return'🌆';if(pop>100000)return'🏙️';
+  if(pop>20000)return'🏘️';if(pop>5000)return'🏡';return'🏠';
+}
+
+// ═══════════════════════════════════════════
+//  DATA — same tree as before
+// ═══════════════════════════════════════════
+function personnel(){
+  return{label:'Charges de personnel',value:18600000,color:COLORS[0],
+    anomaly:'⚠ Ratio 35.8% > moy. nationale 33%',
+    children:[
+      {label:'Direction & cabinet',value:1240000,color:COLORS[0],isService:true,children:[
+        {label:'Cat. A+ — Emplois fonctionnels',value:486000,color:COLORS[0],isGrade:true,grade:'Cat. A+',nb:2,persons:[
+          {name:'Directeur Général des Services',grade:'DGS — Emploi fonctionnel',brut:'7 200 €/mois',net:'~5 580 €/mois',base:'Décret 87-1101',annuel:98000},
+          {name:'Directeur Général Adjoint',grade:'DGA — Emploi fonctionnel',brut:'6 100 €/mois',net:'~4 730 €/mois',base:'Décret 87-1101',annuel:88000},
+        ]},
+        {label:'Cat. A — Attachés',value:396000,color:COLORS[1],isGrade:true,grade:'Cat. A',nb:4,persons:[
+          {name:'Chargé de mission communication',grade:'Attaché territorial éch.5',brut:'3 420 €/mois',net:'~2 650 €/mois',base:'Décret 87-1099',annuel:62000},
+          {name:'Chargé de mission RH',grade:'Attaché territorial éch.4',brut:'3 210 €/mois',net:'~2 490 €/mois',base:'Décret 87-1099',annuel:58000},
+          {name:'Chef de cabinet',grade:'Attaché principal éch.3',brut:'3 680 €/mois',net:'~2 852 €/mois',base:'Décret 87-1099',annuel:68000},
+          {name:'Chargé de mission économique',grade:'Attaché territorial éch.3',brut:'3 100 €/mois',net:'~2 403 €/mois',base:'Décret 87-1099',annuel:56000},
+        ]},
+        {label:'Cat. B — Rédacteurs',value:108000,color:COLORS[2],isGrade:true,grade:'Cat. B',nb:2,persons:[
+          {name:'Secrétaire de direction',grade:'Rédacteur principal 1ère cl. éch.7',brut:'2 960 €/mois',net:'~2 295 €/mois',base:'IB487 · Décret 87-1099',annuel:54000},
+          {name:'Assistant de direction',grade:'Rédacteur éch.5',brut:'2 500 €/mois',net:'~1 938 €/mois',base:'Décret 87-1099',annuel:46000},
+        ]},
+        {label:'Élus — Indemnités',value:250000,color:COLORS[3],isGrade:true,grade:'Élus',nb:13,persons:[
+          {name:'Maire',grade:'Décret 82-1012 · 20-50k hab.',brut:'2 620 €/mois',net:'~2 030 €/mois',base:'Art. L.2123-20 CGCT',annuel:31440},
+          {name:'1er Adjoint',grade:'Décret 82-1012',brut:'1 048 €/mois',net:'~812 €/mois',base:'CGCT',annuel:12576},
+          {name:'Adjoints délégués (×6)',grade:'Décret 82-1012',brut:'785 €/mois',net:'~608 €/mois',base:'CGCT',annuel:9420,note:'× 6 = 56 520€/an'},
+          {name:'Conseillers (×5)',grade:'Décret 82-1012',brut:'480 €/mois',net:'~372 €/mois',base:'CGCT',annuel:5760,note:'× 5 = 28 800€/an'},
+        ]},
+      ]},
+      {label:'Services techniques',value:3600000,color:COLORS[1],isService:true,children:[
+        {label:'Cat. A — Ingénieurs',value:540000,color:COLORS[0],isGrade:true,grade:'Cat. A',nb:4,persons:[
+          {name:'Directeur services tech.',grade:'Ingénieur hors cl. éch.4',brut:'5 100 €/mois',net:'~3 952 €/mois',base:'Décret 90-126',annuel:78000},
+          {name:'Ingénieur voirie',grade:'Ingénieur territorial éch.6',brut:'3 600 €/mois',net:'~2 790 €/mois',base:'Décret 90-126',annuel:52000},
+          {name:'Ingénieur bâtiments',grade:'Ingénieur territorial éch.5',brut:'3 480 €/mois',net:'~2 698 €/mois',base:'Décret 90-126',annuel:50000},
+          {name:'Ingénieur réseaux',grade:'Ingénieur territorial éch.4',brut:'3 280 €/mois',net:'~2 542 €/mois',base:'Décret 90-126',annuel:48000},
+        ]},
+        {label:'Cat. B — Techniciens',value:830000,color:COLORS[1],isGrade:true,grade:'Cat. B',nb:8,persons:[
+          {name:'Chefs d\'équipe (×2)',grade:'Tech. sup. éch.9',brut:'2 930 €/mois',net:'~2 271 €/mois',base:'Décret 2012-924',annuel:44000,note:'× 2'},
+          {name:'Techniciens bâtiment (×2)',grade:'Tech. sup. éch.7',brut:'2 730 €/mois',net:'~2 115 €/mois',base:'Décret 2012-924',annuel:40000,note:'× 2'},
+          {name:'Tech. espaces verts (×2)',grade:'Tech. sup. éch.6',brut:'2 600 €/mois',net:'~2 015 €/mois',base:'Décret 2012-924',annuel:38000,note:'× 2'},
+          {name:'Agents de maîtrise (×2)',grade:'Agent maîtrise princ. éch.8',brut:'2 400 €/mois',net:'~1 860 €/mois',base:'Décret 87-1103',annuel:35000,note:'× 2'},
+        ]},
+        {label:'Cat. C — Adjoints tech.',value:1760000,color:COLORS[2],isGrade:true,grade:'Cat. C',nb:22,persons:[
+          {name:'Adj. tech. princ. (×8)',grade:'Cat. C éch.5',brut:'1 915 €/mois',net:'~1 485 €/mois',base:'Décret 87-1099',annuel:28000,note:'× 8 = 224k€/an'},
+          {name:'Adj. tech. 1ère cl. (×8)',grade:'Cat. C éch.3',brut:'1 820 €/mois',net:'~1 411 €/mois',base:'Décret 87-1099',annuel:26000,note:'× 8'},
+          {name:'Adj. tech. 2ème cl. (×6)',grade:'Cat. C éch.2',brut:'1 767 €/mois',net:'~1 370 €/mois',base:'Décret 87-1099',annuel:25000,note:'× 6'},
+        ]},
+        {label:'CDD saisonniers',value:470000,color:COLORS[3],isGrade:true,grade:'CDD',nb:22,persons:[
+          {name:'Agents saisonniers',grade:'CDD 3-6 mois — SMIC',brut:'1 220 €/mois',net:'~945 €/mois',base:'SMIC 2022',annuel:7500,note:'~22 contrats/an'},
+        ]},
+      ]},
+      {label:'Éducation & petite enfance',value:2800000,color:COLORS[2],isService:true,children:[
+        {label:'Cat. A — Cadres éducatifs',value:520000,color:COLORS[0],isGrade:true,grade:'Cat. A',nb:4,persons:[
+          {name:'Directrice crèche Pasteur',grade:'Puéricultrice cadre sup.',brut:'3 400 €/mois',net:'~2 635 €/mois',base:'Décret 92-860',annuel:54000},
+          {name:'Directrice crèche Faidherbe',grade:'Puéricultrice cadre sup.',brut:'3 400 €/mois',net:'~2 635 €/mois',base:'Décret 92-860',annuel:54000},
+          {name:'Coordinatrice périscolaire',grade:'EJE principale',brut:'2 950 €/mois',net:'~2 286 €/mois',base:'Décret 92-860',annuel:46000},
+          {name:'Psychologue scolaire',grade:'Psychologue éch.4',brut:'3 280 €/mois',net:'~2 542 €/mois',base:'Décret 92-860',annuel:58000},
+        ]},
+        {label:'Cat. B — Éducateurs',value:760000,color:COLORS[1],isGrade:true,grade:'Cat. B',nb:8,persons:[
+          {name:'Éducateurs APS (×8)',grade:'Éducateur APS princ. éch.6',brut:'2 510 €/mois',net:'~1 946 €/mois',base:'Décret 92-860',annuel:37000,note:'× 8'},
+        ]},
+        {label:'Cat. C — ATSEM',value:1260000,color:COLORS[2],isGrade:true,grade:'Cat. C',nb:20,persons:[
+          {name:'ATSEM principal (×8)',grade:'Cat. C éch.6',brut:'2 010 €/mois',net:'~1 558 €/mois',base:'Décret 87-1099',annuel:29000,note:'× 8'},
+          {name:'ATSEM 1ère cl. (×8)',grade:'Cat. C éch.4',brut:'1 900 €/mois',net:'~1 473 €/mois',base:'Décret 87-1099',annuel:27000,note:'× 8'},
+          {name:'Animateurs (×4)',grade:'Cat. C éch.3',brut:'1 820 €/mois',net:'~1 411 €/mois',base:'Décret 87-1099',annuel:26000,note:'× 4'},
+        ]},
+      ]},
+      {label:'Police municipale',value:1440000,color:COLORS[0],isService:true,children:[
+        {label:'Cat. B — Encadrement',value:318000,color:COLORS[0],isGrade:true,grade:'Cat. B',nb:3,persons:[
+          {name:'Chef de service PM',grade:'Brigadier-chef principal éch.9',brut:'3 180 €/mois',net:'~2 465 €/mois',base:'Décret 2006-1391',annuel:78000,note:'+prime 400€/mois'},
+          {name:'Brigadiers PM (×2)',grade:'Brigadier PM éch.7',brut:'2 640 €/mois',net:'~2 046 €/mois',base:'Décret 2006-1391',annuel:48000,note:'× 2'},
+        ]},
+        {label:'Cat. C — Gardiens',value:1122000,color:COLORS[1],isGrade:true,grade:'Cat. C',nb:11,persons:[
+          {name:'Gardiens PM éch.8 (×4)',grade:'Cat. C — PM éch.8',brut:'2 060 €/mois',net:'~1 597 €/mois',base:'Décret 2006-1391',annuel:37000,note:'+prime 260€/mois'},
+          {name:'Gardiens PM éch.5 (×4)',grade:'Cat. C — PM éch.5',brut:'1 920 €/mois',net:'~1 489 €/mois',base:'Décret 2006-1391',annuel:34000},
+          {name:'Gardiens PM éch.2 (×3)',grade:'Cat. C — PM éch.2',brut:'1 800 €/mois',net:'~1 395 €/mois',base:'Décret 2006-1391',annuel:31000},
+        ]},
+      ]},
+      {label:'Administration générale',value:2160000,color:COLORS[3],isService:true,children:[
+        {label:'Cat. A — Cadres admin.',value:540000,color:COLORS[0],isGrade:true,grade:'Cat. A',nb:5,persons:[
+          {name:'Resp. finances',grade:'Attaché principal éch.7',brut:'3 842 €/mois',net:'~2 980 €/mois',base:'IB618',annuel:62000},
+          {name:'Resp. RH',grade:'Attaché principal éch.6',brut:'3 650 €/mois',net:'~2 829 €/mois',base:'Décret 87-1099',annuel:58000},
+          {name:'Resp. informatique',grade:'Attaché éch.5',brut:'3 420 €/mois',net:'~2 650 €/mois',base:'Décret 87-1099',annuel:54000},
+          {name:'Resp. état-civil',grade:'Attaché éch.4',brut:'3 210 €/mois',net:'~2 490 €/mois',base:'Décret 87-1099',annuel:50000},
+          {name:'Resp. accueil',grade:'Attaché éch.3',brut:'3 100 €/mois',net:'~2 403 €/mois',base:'Décret 87-1099',annuel:48000},
+        ]},
+        {label:'Cat. B — Rédacteurs',value:520000,color:COLORS[1],isGrade:true,grade:'Cat. B',nb:7,persons:[
+          {name:'Rédacteurs principaux (×3)',grade:'Rédacteur princ. éch.6',brut:'2 780 €/mois',net:'~2 155 €/mois',base:'Décret 87-1099',annuel:40000,note:'× 3'},
+          {name:'Rédacteurs (×4)',grade:'Rédacteur éch.5',brut:'2 500 €/mois',net:'~1 938 €/mois',base:'Décret 87-1099',annuel:36000,note:'× 4'},
+        ]},
+        {label:'Cat. C — Adjoints admin.',value:860000,color:COLORS[2],isGrade:true,grade:'Cat. C',nb:13,persons:[
+          {name:'Adj. admin. princ. (×5)',grade:'Cat. C éch.7',brut:'2 030 €/mois',net:'~1 573 €/mois',base:'Décret 87-1099',annuel:30000,note:'× 5'},
+          {name:'Adj. admin. 1ère cl. (×5)',grade:'Cat. C éch.5',brut:'1 900 €/mois',net:'~1 473 €/mois',base:'Décret 87-1099',annuel:27000,note:'× 5'},
+          {name:'Adj. admin. 2ème cl. (×3)',grade:'Cat. C éch.2',brut:'1 767 €/mois',net:'~1 370 €/mois',base:'Décret 87-1099',annuel:25000,note:'× 3'},
+        ]},
+      ]},
+    ]};
+}
+
+function makeRoot(cityName){
+  return{label:`Budget ${cityName} 2022`,value:52000000,cityName,
+    children:[
+      personnel(),
+      {label:'Charges générales',value:8200000,color:COLORS[2],children:[
+        {label:'Fournitures & matériels',value:1840000,color:COLORS[2],children:[
+          {label:'Fournitures de bureau',value:87400,color:COLORS[2],leaf:true,ltype:'inv',data:{m:'2022-001',a:'STAPLES FRANCE SAS',p:'MAPA',inv:[
+            {n:'FAC-0041',d:'Ramettes papier A4 × 500',s:'Staples',v:4820,dt:'28/01',f:'ok'},
+            {n:'FAC-0198',d:'Matériels informatiques',s:'Staples',v:12400,dt:'14/04',f:'wn',note:'⚠ Prix 18% > catalogue public'},
+          ]}},
+          {label:'Carburants véhicules',value:142000,color:COLORS[3],leaf:true,ltype:'inv',data:{m:'2022-025',a:'TOTALENERGIES',p:'AO groupé',inv:[
+            {n:'Q1',d:'42 véhicules Q1 2022',s:'Total',v:32400,dt:'31/03',f:'ok'},
+            {n:'Q2',d:'42 véhicules Q2 2022',s:'Total',v:38900,dt:'30/06',f:'wn',note:'⚠ +20% prix carburant'},
+          ]}},
+        ]},
+        {label:'Nettoyage bâtiments',value:142000,color:COLORS[2],anomaly:'⚠ 4e reconduction sans mise en concurrence',leaf:true,ltype:'inv',data:{m:'2022-003',a:'ATALIAN',p:'Reconduit 4e année',inv:[
+          {n:'Q1-Q4',d:'Nettoyage hôtel de ville',s:'Atalian',v:142000,dt:'2022',f:'wn',note:'⚠ Reconduction — exiger appel offres 2023'},
+        ]}},
+        {label:'Événementiel fête de la ville',value:196000,color:COLORS[0],anomaly:'🚨 Montant ×3 vs 2021 — sans BOAMP',leaf:true,ltype:'inv',data:{m:'2022-005',a:'SAS EVENT & CO',p:'MAPA — BOAMP non respecté',anomaly:'Montant ×3, même attributaire, sans appel offres obligatoire',inv:[
+          {n:'EV-001',d:'Scène, son, lumière',s:'Event & Co',v:48000,dt:'15/06',f:'ok'},
+          {n:'EV-002',d:'Artistes & cachets — non nommés',s:'Event & Co',v:72000,dt:'15/06',f:'al',note:'🚨 Qui sont les artistes ? Demandez les contrats'},
+          {n:'EV-003',d:'Communication & affichage',s:'Event & Co',v:28000,dt:'20/05',f:'wn'},
+          {n:'EV-004',d:'Frais de coordination 19,4%',s:'Event & Co',v:38000,dt:'01/07',f:'al',note:'🚨 Frais anormalement élevés'},
+          {n:'EV-005',d:'Sécurité & barrières',s:'Event & Co',v:10000,dt:'15/06',f:'ok'},
+        ]}},
+        {label:'Conseil en communication',value:124000,color:COLORS[1],anomaly:'🚨 Prestataire créé 6 mois avant',leaf:true,ltype:'inv',data:{m:'2022-006',a:'AGENCE PIXEL NORD SARL',p:'MAPA',anomaly:'SARL créée nov.2021 — risque favoritisme art.432-14 CP',inv:[
+          {n:'PIX-001',d:'Charte graphique mairie',s:'Pixel Nord',v:18000,dt:'15/06',f:'al',note:'🚨 Prestataire suspect'},
+          {n:'PIX-002',d:'Site internet — refonte',s:'Pixel Nord',v:42000,dt:'01/08',f:'al',note:'🚨 42k€ pour un site communal ?'},
+          {n:'PIX-004',d:'Community management 3 333€/mois',s:'Pixel Nord',v:40000,dt:'Q3-Q4',f:'al',note:'🚨 Très élevé pour 32k hab.'},
+        ]}},
+      ]},
+      {label:'Subventions',value:4800000,color:COLORS[4],children:[
+        {label:'Sport (clubs)',value:1240000,color:COLORS[4],children:[
+          {label:'AS Cambrésienne (football)',value:68000,color:COLORS[4],leaf:true,ltype:'pers',data:{role:'Association sportive',grade:'Club football amateur',brut:'68 000 €/an',net:'Fonctionnement',base:'Délibération CM 15/03/2022',note:'✅ Convention en règle'}},
+          {label:'Clubs natation, judo, hand.',value:42000,color:COLORS[5],leaf:true,ltype:'pers',data:{role:'3 clubs — 14 000€ chacun',grade:'Conventionnés',brut:'42 000 €',net:'Subventions',base:'Délibération CM',note:'✅ OK'}},
+        ]},
+        {label:'Culture & événements',value:1680000,color:COLORS[5],children:[
+          {label:'Cambrai en Fête',value:95000,color:COLORS[4],anomaly:'⚠ Présidente = conjointe d\'un élu',leaf:true,ltype:'pers',data:{role:'Association événementielle',grade:'SIRET 2018',brut:'95 000 €/an (+45%)',net:'2021 : 65 500€',base:'Délibération CM 28/06/2022',note:'⚠ Présidente = conjointe d\'un conseiller municipal — art. L.2131-11 CGCT'}},
+          {label:"Club d'entreprises",value:45000,color:COLORS[5],anomaly:'🚨 Asso créée 3 mois avant',leaf:true,ltype:'pers',data:{role:'Association économique',grade:'Créée juil.2022 → subv. oct.2022',brut:'45 000 €',net:'Objet social vague',base:'Délibération CM 27/09/2022',note:'🚨 Créée 3 mois avant — aucun bilan possible'}},
+        ]},
+        {label:'Social & solidarité',value:1680000,color:COLORS[6],children:[
+          {label:'CCAS',value:840000,color:COLORS[6],leaf:true,ltype:'pers',data:{role:'Établissement public obligatoire',grade:'Dotation annuelle',brut:'840 000 €',net:'Budget propre',base:'Art. L.123-5 CASF',note:'✅ Légalement obligatoire'}},
+          {label:'Croix-Rouge Cambrai',value:42000,color:COLORS[4],leaf:true,ltype:'pers',data:{role:'Association humanitaire',grade:'Convention 2020-2023',brut:'42 000 €',net:'Aide alimentaire',base:'Convention',note:'✅ Rapports transmis'}},
+          {label:'Les Restos du Cœur 59',value:38000,color:COLORS[5],leaf:true,ltype:'pers',data:{role:'Association nationale',grade:'Subvention 2022',brut:'38 000 €',net:'Aide alimentaire urgence',base:'Délibération CM 22/02/2022',note:'✅ Justifiée'}},
+        ]},
+      ]},
+      {label:'Investissement',value:14000000,color:COLORS[3],children:[
+        {label:'Réfection voirie (17 rues)',value:4800000,color:COLORS[3],children:[
+          {label:'Rue du Gén. de Gaulle',value:284000,color:COLORS[3],leaf:true,ltype:'inv',data:{m:'2022-002',a:'EUROVIA NORD',p:'AO ouvert',inv:[
+            {n:'EUR-001',d:'Fraisage & enrobés 2 200m²',s:'Eurovia',v:154000,dt:'30/06',f:'ok'},
+            {n:'EUR-002',d:'Trottoirs & bordures',s:'Eurovia',v:68000,dt:'30/06',f:'ok'},
+          ]}},
+          {label:'Programme voirie — 16 rues',value:3400000,color:COLORS[3],leaf:true,ltype:'inv',data:{m:'2022-044',a:'COLAS NORD',p:'AO ouvert',inv:[
+            {n:'COL-T1',d:'Tranche 1 — 6 rues nord',s:'Colas',v:1100000,dt:'30/09',f:'ok'},
+            {n:'COL-T2',d:'Tranche 2 — 7 rues est',s:'Colas',v:1280000,dt:'15/11',f:'ok'},
+            {n:'COL-T3',d:'Tranche 3 — 4 rues centre',s:'Colas',v:1020000,dt:'15/12',f:'ok'},
+          ]}},
+        ]},
+        {label:'Rénovation école Pasteur',value:2600000,color:COLORS[4],leaf:true,ltype:'inv',data:{m:'2022-067',a:'BOUYGUES BÂTIMENT NORD',p:'AO alloti 5 lots',inv:[
+          {n:'LOT1',d:'Gros œuvre & maçonnerie',s:'Bouygues',v:680000,dt:'31/12',f:'ok'},
+          {n:'LOT2',d:'Charpente & couverture',s:'Charpentiers du Nord',v:420000,dt:'31/12',f:'ok'},
+          {n:'LOT3',d:'Menuiseries extérieures',s:'Menuiserie Leconte',v:290000,dt:'31/12',f:'ok'},
+          {n:'LOT4',d:'Plomberie & CVC',s:'Nord Plomberie',v:310000,dt:'31/12',f:'ok'},
+          {n:'LOT5',d:'Électricité',s:'Elec Nord',v:140000,dt:'31/12',f:'ok'},
+        ]}},
+        {label:'Véhicules techniques (×3)',value:142500,color:COLORS[3],anomaly:'⚠ Prix +18% vs catalogue public',leaf:true,ltype:'inv',data:{m:'2022-009',a:'RENAULT TRUCKS',p:'MAPA',anomaly:'47 500€/véh. vs 40 200€ catalogue — +18% inexpliqué',inv:[
+          {n:'RT-001',d:'Renault Master benne × 1',s:'Renault Trucks',v:47500,dt:'15/10',f:'al',note:'🚨 +18% vs catalogue — exiger devis détaillé'},
+          {n:'RT-002',d:'Renault Master benne × 1',s:'Renault Trucks',v:47500,dt:'15/10',f:'al'},
+          {n:'RT-003',d:'Renault Master benne × 1',s:'Renault Trucks',v:47500,dt:'15/10',f:'al'},
+        ]}},
+      ]},
+      {label:'Charge de la dette',value:1240000,color:COLORS[5],anomaly:'⚠ 3 emprunts à taux variable non renégociés',children:[
+        {label:'Emprunt Crédit Agricole 2015',value:480000,color:COLORS[5],leaf:true,ltype:'inv',data:{m:'EMPRUNT-CA',a:'CRÉDIT AGRICOLE NORD',p:'Capital 4,2 M€',inv:[
+          {n:'INT-CA',d:'Intérêts 2022 — Euribor+1.2% = 3.1%',s:'Crédit Agricole',v:186000,dt:'31/12',f:'wn',note:'⚠ Taux variable — était 0.9% en 2021'},
+        ]}},
+        {label:"Emprunt Caisse d'Épargne 2018",value:420000,color:COLORS[6],leaf:true,ltype:'inv',data:{m:'EMPRUNT-CE',a:"CAISSE D'ÉPARGNE HDF",p:'Capital 3,8 M€',inv:[
+          {n:'INT-CE',d:'Intérêts 2022 — taux fixe 1.85%',s:"Caisse d'Épargne",v:164000,dt:'31/12',f:'ok'},
+        ]}},
+        {label:'Emprunt Banque des Territoires',value:340000,color:COLORS[5],leaf:true,ltype:'inv',data:{m:'EMPRUNT-BPI',a:'BANQUE DES TERRITOIRES',p:'Capital 5,1 M€ — COVID',inv:[
+          {n:'INT-BPI',d:'Intérêts 2022 — taux fixe 0.95%',s:'Banque Territoires',v:120000,dt:'31/12',f:'ok',note:'Taux avantageux COVID'},
+        ]}},
+      ]},
+      {label:'Charges exceptionnelles',value:380000,color:COLORS[7]||COLORS[0],anomaly:'⚠ +45% inexpliqué en 1 an',leaf:true,ltype:'inv',data:{m:'CHAP-67',a:'Divers',p:'Hors marché',anomaly:'+45% sans justification — bénéficiaire non identifié',inv:[
+        {n:'CE-001',d:'Indemnités contentieux (×3)',s:'Divers',v:124000,dt:'2022',f:'wn'},
+        {n:'CE-002',d:'Créances irrécouvrables',s:'—',v:89000,dt:'2022',f:'wn'},
+        {n:'CE-003',d:'Subvention exceptionnelle non prévue',s:'—',v:167000,dt:'2022',f:'al',note:'🚨 Bénéficiaire non identifié !'},
+      ]}},
+    ]};
+}
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let ROOT = makeRoot('Cambrai');
+let nav = [ROOT];
+let hiIdx = -1;
+let currentCity = null;
+let animRaf;
+const cur = () => nav[nav.length-1];
+
+// ═══════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════
+function render(anim=true){
+  const node = cur();
+  const items = node.children||[];
+  const total = items.reduce((a,b)=>a+b.value,0);
+
+  // Floating labels
+  const depth = nav.length-1;
+  const tagLabels = ['Budget communal','Catégories','Services · Personnel','Grades · Échelons'];
+  document.getElementById('lf-tag').textContent = tagLabels[Math.min(depth,3)];
+  const nameEl = document.getElementById('lf-name');
+  if(depth>0){ nameEl.textContent=node.label; nameEl.style.display='block'; }
+  else{ nameEl.style.display='none'; }
+
+  // Center
+  if(currentCity){
+    document.getElementById('dc-city').textContent = currentCity.nom;
+    document.getElementById('dc-amount').innerHTML = `<strong>${fmt(total||node.value)}</strong>`;
+    document.getElementById('dc-sub').textContent = depth===0?'budget total':'sous-total';
+  }
+
+  // Back
+  document.getElementById('back-btn').classList.toggle('on', nav.length>1);
+
+  // Anomaly bar
+  const anomItems = items.filter(i=>i.anomaly);
+  const abar = document.getElementById('anom-bar');
+  if(anomItems.length){ abar.classList.add('vis'); document.getElementById('anom-count').textContent=anomItems.length; }
+  else { abar.classList.remove('vis'); }
+
+  buildBC();
+  drawPie(items,total,anim);
+  buildCards(items,total);
+}
+
+// ═══════════════════════════════════════════
+//  PIE — pure canvas, no labels
+// ═══════════════════════════════════════════
+function drawPie(items,total,anim){
+  const field = document.getElementById('pie-field');
+  const cv = document.getElementById('pie');
+  const dpr = devicePixelRatio||1;
+  const W=field.clientWidth, H=field.clientHeight;
+
+  cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+
+  // Size donut center overlay
+  const IR_ratio = 0.28;
+  const R_val = Math.min(W/2,H/2)*0.88;
+  const holePx = R_val*IR_ratio*2;
+  const dc=document.getElementById('donut-center');
+  dc.style.width=holePx+'px'; dc.style.height=holePx+'px';
+
+  const ctx=cv.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  if(!items.length){ ctx.clearRect(0,0,W,H); drawEmptyPie(ctx,W,H); return; }
+
+  const cx=W/2, cy=H/2;
+  const R=Math.min(W/2,H/2)*0.88;
+  const IR=R*0.28;
+  const gap=items.length>7?0.007:0.012;
+
+  const slices=[];
+  let sa=-Math.PI/2;
+  items.forEach((item,i)=>{
+    const sw=(item.value/total)*(2*Math.PI-gap*items.length);
+    const color=item.color||COLORS[i%COLORS.length];
+    slices.push({sa,ea:sa+sw,i,item,color});
+    sa+=sw+gap;
+  });
+  slices.forEach(s=>s.mid=(s.sa+s.ea)/2);
+  cv._s=slices; cv._m={cx,cy,R,IR};
+
+  let p=anim?0:1;
+
+  function paint(prog){
+    ctx.clearRect(0,0,W,H);
+    slices.forEach(sl=>{
+      const act=hiIdx===sl.i;
+      const bump=act?R*0.04:0;
+      const mid=sl.mid;
+      const psa=-Math.PI/2+(sl.sa+Math.PI/2)*prog;
+      const pea=-Math.PI/2+(sl.ea+Math.PI/2)*prog;
+
+      ctx.save();
+      if(act){
+        ctx.translate(Math.cos(mid)*bump,Math.sin(mid)*bump);
+        ctx.shadowColor=sl.color+'80';
+        ctx.shadowBlur=R*0.08;
+      }
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,act?R*1.04:R,psa,pea);
+      ctx.closePath();
+      ctx.fillStyle=sl.color+(sl.item.anomaly?'bb':'ee');
+      ctx.fill();
+      ctx.shadowBlur=0;
+
+      // anomaly hatch
+      if(sl.item.anomaly&&prog>0.9){
+        ctx.save();ctx.clip();
+        ctx.strokeStyle='rgba(255,107,107,0.18)';ctx.lineWidth=R*0.03;
+        for(let x=-W;x<W*2;x+=W*0.05){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+H,H);ctx.stroke();}
+        ctx.restore();
+      }
+      ctx.strokeStyle=act?'rgba(255,255,255,0.7)':'rgba(6,16,29,0.45)';
+      ctx.lineWidth=act?2:1;
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    // hole
+    ctx.beginPath();ctx.arc(cx,cy,IR,0,2*Math.PI);
+    ctx.fillStyle='#06101d';ctx.fill();
+    // subtle rim
+    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1.5;ctx.stroke();
+  }
+
+  if(anim){
+    const t0=performance.now(),dur=640;
+    const frame=now=>{
+      const raw=(now-t0)/dur;
+      paint(Math.min(1,1-Math.pow(1-raw,3)));
+      if(raw<1)animRaf=requestAnimationFrame(frame);
+    };
+    if(animRaf)cancelAnimationFrame(animRaf);
+    requestAnimationFrame(frame);
+  }else{paint(1);}
+}
+
+function drawEmptyPie(ctx,W,H){
+  // Beautiful empty state — glowing rings
+  const cx=W/2,cy=H/2;
+  const R=Math.min(W,H)*0.38;
+  for(let i=3;i>0;i--){
+    ctx.beginPath();ctx.arc(cx,cy,R*(0.6+i*0.15),0,2*Math.PI);
+    ctx.strokeStyle=`rgba(91,156,246,${0.04*i})`;ctx.lineWidth=R*0.12;ctx.stroke();
+  }
+  ctx.beginPath();ctx.arc(cx,cy,R*0.28,0,2*Math.PI);
+  ctx.fillStyle='rgba(91,156,246,0.04)';ctx.fill();
+}
+
+// ═══════════════════════════════════════════
+//  CARDS
+// ═══════════════════════════════════════════
+function buildCards(items,total){
+  const scroll=document.getElementById('items-scroll');
+  scroll.innerHTML='';
+  if(!items.length)return;
+
+  items.forEach((item,i)=>{
+    const pct=((item.value/total)*100).toFixed(1);
+    const color=item.color||COLORS[i%COLORS.length];
+    const card=document.createElement('div');
+    card.className='icard'+(item.anomaly?' anomaly':'');
+    card.style.setProperty('--color',color);
+
+    const drill=item.isGrade?`${item.nb} ag.`:item.leaf?'📋':item.children?.length?'›':'';
+
+    card.innerHTML=`
+      <div class="icard-stripe" style="background:${color}"></div>
+      <div class="icard-icon">${ico(item.label)}</div>
+      <div class="icard-name">${item.label}</div>
+      <div class="icard-pct">${pct}%</div>
+      <div class="icard-amt">${fmt(item.value)}</div>
+      ${item.anomaly?`<div class="icard-badge">🚨</div>`:''}
+      ${drill?`<div class="icard-drill">${drill}</div>`:''}
+    `;
+    card.addEventListener('click',()=>clickItem(i));
+    // touch highlight synced to pie
+    card.addEventListener('touchstart',()=>{hiIdx=i;redraw();},{passive:true});
+    card.addEventListener('touchend',()=>{hiIdx=-1;redraw();},{passive:true});
+    scroll.appendChild(card);
+  });
+}
+
+function redraw(){
+  const n=cur(),items=n.children||[];
+  drawPie(items,items.reduce((a,b)=>a+b.value,0),false);
+}
+
+// ═══════════════════════════════════════════
+//  BREADCRUMB
+// ═══════════════════════════════════════════
+function buildBC(){
+  const el=document.getElementById('bc-float');el.innerHTML='';
+  if(nav.length<=1)return;
+  nav.forEach((node,i)=>{
+    if(i){const s=document.createElement('span');s.className='bc-sep';s.textContent='›';el.appendChild(s);}
+    const d=document.createElement('div');
+    d.className='bc-crumb'+(i===nav.length-1?' now':'');
+    d.textContent=i===0?(currentCity?.nom||'Budget'):node.label;
+    if(i<nav.length-1){const idx=i;d.addEventListener('click',()=>{nav.splice(idx+1);hiIdx=-1;closeDrawer();render(true);});}
+    el.appendChild(d);
+  });
+}
+
+// ═══════════════════════════════════════════
+//  CANVAS HIT TEST
+// ═══════════════════════════════════════════
+function hit(e){
+  const cv=document.getElementById('pie');if(!cv._s)return-1;
+  const r=cv.getBoundingClientRect();
+  const px=(e.clientX-r.left)*(cv.width/r.width)/devicePixelRatio;
+  const py=(e.clientY-r.top)*(cv.height/r.height)/devicePixelRatio;
+  const{cx,cy,R,IR}=cv._m;
+  const dx=px-cx,dy=py-cy,dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<IR||dist>R*1.07)return-1;
+  const a=Math.atan2(dy,dx);
+  for(const sl of cv._s){
+    if(a>=sl.sa&&a<=sl.ea)return sl.i;
+    if(a+2*Math.PI>=sl.sa&&a+2*Math.PI<=sl.ea)return sl.i;
+  }
+  return-1;
+}
+
+const PIE=document.getElementById('pie');
+PIE.addEventListener('touchstart',e=>{const t=e.changedTouches[0];const idx=hit(t);if(idx>=0){hiIdx=idx;redraw();}},{passive:true});
+PIE.addEventListener('touchend',e=>{e.preventDefault();const t=e.changedTouches[0];const idx=hit(t);hiIdx=-1;redraw();if(idx>=0)clickItem(idx);});
+PIE.addEventListener('click',e=>{const idx=hit(e);if(idx>=0)clickItem(idx);});
+PIE.addEventListener('mousemove',e=>{const idx=hit(e);if(idx!==hiIdx){hiIdx=idx;redraw();}PIE.style.cursor=idx>=0?'pointer':'default';});
+PIE.addEventListener('mouseleave',()=>{hiIdx=-1;redraw();PIE.style.cursor='default';});
+window.addEventListener('resize',()=>render(false));
+document.addEventListener('keydown',e=>{if((e.key==='Escape'||e.key==='Backspace')&&document.activeElement.tagName!=='INPUT'){if(searchIsOpen())closeSearch();else goBack();}});
+
+// ═══════════════════════════════════════════
+//  CLICK
+// ═══════════════════════════════════════════
+function clickItem(idx){
+  const node=cur(),item=node.children[idx];
+  if(!item)return;
+  if(item.leaf){openDrawer(item);return;}
+  if(item.children?.length){nav.push(item);hiIdx=-1;closeDrawer();render(true);return;}
+  openDrawer(item);
+}
+
+function goBack(){
+  if(nav.length<=1)return;
+  nav.pop();hiIdx=-1;closeDrawer();render(true);
+}
+
+function onLogoTap(){
+  // Scroll cards back to start
+  document.getElementById('items-scroll').scrollTo({left:0,behavior:'smooth'});
+  if(nav.length>1){nav=[ROOT];hiIdx=-1;closeDrawer();render(true);}
+}
+
+// ═══════════════════════════════════════════
+//  SEARCH — geo.api.gouv.fr
+// ═══════════════════════════════════════════
+const RECENT_KEY='tr_recent_v2';
+const getRecent=()=>{ try{return JSON.parse(localStorage.getItem(RECENT_KEY)||'[]');}catch{return[];} };
+const saveRecent=city=>{ let r=getRecent().filter(c=>c.code!==city.code);r.unshift(city);r=r.slice(0,6);try{localStorage.setItem(RECENT_KEY,JSON.stringify(r));}catch{} };
+const searchIsOpen=()=>document.getElementById('search-overlay').classList.contains('open');
+
+let searchTimer=null, soResults=[], soFocus=-1;
+
+function openSearch(){
+  const ov=document.getElementById('search-overlay');
+  ov.classList.add('open');
+  setTimeout(()=>{ document.getElementById('so-input').focus(); },80);
+  showRecentResults();
+}
+
+function closeSearch(){
+  document.getElementById('search-overlay').classList.remove('open');
+  document.getElementById('so-input').blur();
+}
+
+function clearSO(){
+  const inp=document.getElementById('so-input');
+  inp.value='';
+  document.getElementById('so-clear').classList.remove('vis');
+  soResults=[];soFocus=-1;
+  showRecentResults();
+  inp.focus();
+}
+
+const soInp=document.getElementById('so-input');
+soInp.addEventListener('input',()=>{
+  const q=soInp.value.trim();
+  document.getElementById('so-clear').classList.toggle('vis',q.length>0);
+  if(q.length===0){showRecentResults();return;}
+  if(q.length<2)return;
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(()=>searchGeo(q),200);
+});
+soInp.addEventListener('keydown',e=>{
+  const items=document.querySelectorAll('.so-item');
+  if(e.key==='ArrowDown'){e.preventDefault();soFocus=Math.min(soFocus+1,items.length-1);items.forEach((el,i)=>el.classList.toggle('focused',i===soFocus));}
+  else if(e.key==='ArrowUp'){e.preventDefault();soFocus=Math.max(soFocus-1,0);items.forEach((el,i)=>el.classList.toggle('focused',i===soFocus));}
+  else if(e.key==='Enter'){e.preventDefault();if(soFocus>=0&&soResults[soFocus])pickCity(soResults[soFocus]);else if(soResults[0])pickCity(soResults[0]);}
+});
+
+function showRecentResults(){
+  const r=getRecent();
+  const el=document.getElementById('so-results');
+  if(!r.length){
+    el.innerHTML=`<div class="so-empty">
+      <div style="font-size:2.5rem;margin-bottom:12px">🔍</div>
+      Tapez le nom de votre commune<br>
+      <span style="font-size:.75rem;color:var(--ghost);margin-top:6px;display:block">35 357 communes disponibles</span>
+    </div>`;
+    soResults=[]; return;
+  }
+  el.innerHTML=`<div class="so-section-head">Dernières recherches</div>`+r.map((c,i)=>soItemHTML(c,i,'🕐')).join('');
+  soResults=r;
+  bindSOItems();
+}
+
+async function searchGeo(q){
+  const el=document.getElementById('so-results');
+  el.innerHTML=`<div class="so-loader"><div class="dots"><span></span><span></span><span></span></div>Recherche…</div>`;
+  try{
+    const res=await fetch(`https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(q)}&fields=nom,code,codesPostaux,codeDepartement,departement,population&boost=population&limit=8`);
+    const data=await res.json();
+    if(!data.length){el.innerHTML=`<div class="so-empty">Aucune commune trouvée pour <strong>"${q}"</strong></div>`;soResults=[];return;}
+    soResults=data.map(c=>({nom:c.nom,code:c.code,dept:c.departement?.nom||c.codeDepartement,deptNum:c.codeDepartement,cp:c.codesPostaux?.[0]||'',pop:c.population||0}));
+    el.innerHTML=`<div class="so-section-head">${data.length} résultat${data.length>1?'s':''}</div>`+soResults.map((c,i)=>soItemHTML(c,i,cityEmoji(c.pop),q)).join('');
+    soFocus=-1;bindSOItems();
+  }catch{
+    el.innerHTML=`<div class="so-empty">⚠ Erreur réseau<br><span style="font-size:.75rem">Vérifiez votre connexion</span></div>`;
+  }
+}
+
+function soItemHTML(c,i,emo,q=''){
+  const name=q?c.nom.replace(new RegExp(q,'gi'),m=>`<mark>${m}</mark>`):c.nom;
+  return`<div class="so-item" data-idx="${i}">
+    <div class="si-icon">${emo}</div>
+    <div class="si-body">
+      <div class="si-name">${name}</div>
+      <div class="si-sub">${c.dept||''} ${c.deptNum?'('+c.deptNum+')':''} · ${c.cp}</div>
+    </div>
+    <div class="si-pop">${fmtPop(c.pop)}</div>
+    <div class="si-arr">›</div>
+  </div>`;
+}
+
+function bindSOItems(){
+  document.querySelectorAll('.so-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const idx=parseInt(el.dataset.idx);
+      if(soResults[idx])pickCity(soResults[idx]);
+    });
+  });
+}
+
+function pickCity(city){
+  saveRecent(city);
+  closeSearch();
+  loadCityData(city);
+}
+
+// ═══════════════════════════════════════════
+//  BUILD TREE FROM API RESPONSE
+// ═══════════════════════════════════════════
+function buildTreeFromAPI(d){
+  const C=COLORS;
+  const chapEntries=Object.entries(d.chapitres||{});
+  const chapChildren=chapEntries.map(([code,ch],i)=>({
+    label:ch.lib||`Chapitre ${code}`,
+    value:ch.depense||0,
+    color:C[i%C.length],
+    leaf:true,
+    ltype:'inv',
+    data:{m:`CHAP-${code}`,a:'DGFIP',p:'Comptabilité M14',inv:[]},
+  }));
+
+  const marchesChildren=(d.marches||[]).filter(m=>m.montant>0).map((m,i)=>({
+    label:m.objet||m.ref||'Marché',
+    value:m.montant,
+    color:C[(i+2)%C.length],
+    leaf:true,
+    ltype:'inv',
+    data:{m:m.ref,a:m.attributaire,p:m.procedure,inv:[
+      {n:m.ref,d:m.objet,s:m.attributaire,v:m.montant,dt:m.date,f:'ok'},
+    ]},
+  }));
+
+  const subvChildren=(d.subventions||[]).filter(s=>s.montant>0).map((s,i)=>({
+    label:s.beneficiaire||'Association',
+    value:s.montant,
+    color:C[(i+4)%C.length],
+    leaf:true,
+    ltype:'pers',
+    data:{role:s.beneficiaire,grade:s.objet||'',brut:fmtEur(s.montant),net:'',base:`Convention ${s.annee||''}`,note:''},
+  }));
+
+  const children=[];
+  if(chapChildren.length) children.push({label:'Budget par chapitres',value:chapChildren.reduce((a,c)=>a+c.value,0),color:C[0],children:chapChildren});
+  if(marchesChildren.length) children.push({label:'Marchés publics',value:marchesChildren.reduce((a,c)=>a+c.value,0),color:C[3],children:marchesChildren});
+  if(subvChildren.length) children.push({label:'Subventions',value:subvChildren.reduce((a,c)=>a+c.value,0),color:C[4],children:subvChildren});
+
+  // Anomalies → inject into relevant nodes
+  const anomalies=d.anomalies_auto||[];
+  for(const an of anomalies){
+    if(an.type==='ratio_personnel_eleve'){
+      const ch012=chapChildren.find(c=>c.label.includes('personnel'));
+      if(ch012) ch012.anomaly=`⚠ Ratio ${an.valeur}% > seuil ${an.seuil}%`;
+    }
+    if(an.type==='marche_reconduit'){
+      const mc=marchesChildren.find(c=>c.data?.a?.toLowerCase()===an.attributaire);
+      if(mc) mc.anomaly=`⚠ Reconduit ${an.nombre} fois`;
+    }
+  }
+
+  return{
+    label:`Budget ${d.nom} ${d.annee||2023}`,
+    value:d.budget_total||children.reduce((a,c)=>a+c.value,0),
+    cityName:d.nom,
+    children,
+    kpis:d.kpis,
+    anomalies_auto:anomalies,
+  };
+}
+
+function fmtEur(v){return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v);}
+
+// ═══════════════════════════════════════════
+//  LOAD CITY — async with API call
+// ═══════════════════════════════════════════
+async function loadCityData(city){
+  currentCity=city;
+  closeDrawer();
+
+  // Update search pill immediately
+  document.getElementById('sp-label').textContent=city.nom;
+  document.getElementById('sp-label').classList.add('has-city');
+  const deptEl=document.getElementById('sp-dept');
+  deptEl.textContent=city.deptNum;
+  deptEl.style.display='';
+
+  // Show loader
+  const lo=document.getElementById('loading-overlay');
+  const loTxt=document.getElementById('lo-text');
+  loTxt.textContent=`Chargement des données DGFIP…`;
+  loTxt.classList.remove('lo-err');
+  lo.classList.add('on');
+
+  try{
+    const res=await fetch(`/api/commune?insee=${city.code}`);
+    if(!res.ok) throw new Error(`Erreur ${res.status}`);
+    const data=await res.json();
+    if(data.error) throw new Error(data.error);
+
+    ROOT=buildTreeFromAPI(data);
+    nav=[ROOT];hiIdx=-1;
+
+    const anomCount=(data.anomalies_auto||[]).length;
+    document.getElementById('alert-badge').style.display=anomCount?'flex':'none';
+    document.getElementById('alert-num').textContent=String(anomCount);
+
+    lo.classList.remove('on');
+    render(true);
+    showToast(`📊 Données DGFIP ${data.annee||2023} · ${city.nom}`);
+  }catch(err){
+    console.error('loadCityData error:', err);
+    // Fallback: données fictives
+    loTxt.innerHTML=`<span class="lo-err">⚠ ${err.message}<br>Chargement des données de démo…</span>`;
+    setTimeout(()=>{
+      ROOT=makeRoot(city.nom);
+      nav=[ROOT];hiIdx=-1;
+      document.getElementById('alert-badge').style.display='flex';
+      document.getElementById('alert-num').textContent='5';
+      lo.classList.remove('on');
+      render(true);
+      showToast(`📊 Données de démo · ${city.nom}`);
+    },1500);
+  }
+}
+
+// ═══════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('on');
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.classList.remove('on'),3000);
+}
+
+// ═══════════════════════════════════════════
+//  DRAWER
+// ═══════════════════════════════════════════
+function openDrawer(node){
+  document.getElementById('drw-color').style.background=node.color||'#f0b429';
+  document.getElementById('drw-title').textContent=node.label;
+  document.getElementById('drw-amt').textContent=fmt(node.value);
+
+  let tabs,html;
+  if(node.isGrade&&node.persons){
+    tabs=[['ag','👥 Agents'],['lg','Légal'],['ai','🤖 IA']];
+    html=[buildAgents(node),buildLegal(node),buildAI(node)];
+  }else if(node.ltype==='inv'){
+    tabs=[['fac','📄 Factures'],['mp','Marché'],['ai','🤖 IA']];
+    html=[buildInvs(node),buildMarche(node),buildAI(node)];
+  }else if(node.ltype==='pers'){
+    tabs=[['inf','ℹ️ Info'],['ai','🤖 IA']];
+    html=[buildPersInfo(node),buildAI(node)];
+  }else{
+    tabs=[['dt','Détail'],['ai','🤖 IA']];
+    html=[buildGeneric(node),buildAI(node)];
+  }
+
+  document.getElementById('drw-tabs').innerHTML=tabs.map((t,i)=>`<div class="dtab${i===0?' on':''}" onclick="switchTab('${t[0]}')" data-id="${t[0]}">${t[1]}</div>`).join('');
+  document.getElementById('drw-body').innerHTML=html.map((h,i)=>`<div class="dtc${i===0?' on':''}" id="dtc-${tabs[i][0]}">${h}</div>`).join('');
+
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('overlay').classList.add('on');
+  const aib=document.getElementById('ai-out');
+  if(aib)runAI(node,aib);
+}
+
+function openAllAnomalies(){
+  document.getElementById('drw-color').style.background='#f0b429';
+  document.getElementById('drw-title').textContent='Alertes & questions CM';
+  document.getElementById('drw-amt').textContent='5 anomalies';
+  document.getElementById('drw-tabs').innerHTML=`
+    <div class="dtab on" onclick="switchTab('al')" data-id="al">🚨 Alertes (5)</div>
+    <div class="dtab" onclick="switchTab('qu')" data-id="qu">❓ Questions CM</div>
+    <div class="dtab" onclick="switchTab('ai')" data-id="ai">🤖 IA</div>`;
+  document.getElementById('drw-body').innerHTML=`
+    <div class="dtc on" id="dtc-al">${allAnomalies()}</div>
+    <div class="dtc" id="dtc-qu">${allQuestions()}</div>
+    <div class="dtc" id="dtc-ai">${buildAI(cur())}</div>`;
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('overlay').classList.add('on');
+  const aib=document.getElementById('ai-out');
+  if(aib)runAI(cur(),aib);
+}
+
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('on');
+  document.getElementById('overlay').classList.remove('on');
+}
+function switchTab(id){
+  document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('on',t.dataset.id===id));
+  document.querySelectorAll('.dtc').forEach(t=>t.classList.toggle('on',t.id==='dtc-'+id));
+}
+
+// ═══════════════════════════════════════════
+//  CONTENT BUILDERS
+// ═══════════════════════════════════════════
+function aBlk(txt){
+  if(!txt)return'';
+  const h=txt.includes('🚨');
+  return`<div class="alert-blk">
+    <div class="ab-ico">${h?'🚨':'⚠️'}</div>
+    <div class="ab-body">
+      <div class="ab-title">${txt.replace(/^[🚨⚠️]\s*/,'')}</div>
+      <div class="ab-cta">Demandez les pièces justificatives au prochain conseil municipal.</div>
+    </div>
+  </div>`;
+}
+
+function buildAgents(node){
+  return aBlk(node.anomaly||'')+`
+    <p style="font-size:.72rem;color:var(--soft);margin-bottom:12px">${node.nb||1} agent(s) · grade : <strong style="color:var(--gold)">${node.grade}</strong></p>
+    <div class="pgrid">${(node.persons||[]).map(p=>`
+      <div class="pcard${p.note?.includes('🚨')||p.note?.includes('⚠')?' al':''}">
+        <div class="pc-role">${p.grade}</div>
+        <div class="pc-name">${p.name}</div>
+        <div class="pc-sal">${p.brut}</div>
+        <div class="pc-net">${p.net} net estimé</div>
+        <div class="pc-base">${p.base}</div>
+        ${p.note?`<div class="pc-note">${p.note}</div>`:''}
+      </div>`).join('')}</div>`;
+}
+
+function buildLegal(node){
+  const p=(node.persons||[])[0]||{};
+  return`<table class="tbl"><tbody>
+    <tr><td style="color:var(--soft);font-size:.74rem;width:120px">Grade</td><td><strong style="color:var(--gold)">${node.grade}</strong></td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Effectif</td><td>${node.nb||1} agent(s)</td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Base légale</td><td class="r">${p.base||'—'}</td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Brut moyen</td><td><strong>${p.brut||'—'}</strong></td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Net estimé</td><td>${p.net||'—'}</td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Coût total/an</td><td><strong style="color:var(--gold)">${fmt(node.value)}</strong></td></tr>
+  </tbody></table>
+  <p style="font-size:.68rem;color:var(--ghost);margin-top:12px;line-height:1.5">Grilles indiciaires fixées par décret — publiques et opposables. Toute modification de grade nécessite une délibération en conseil municipal.</p>`;
+}
+
+function buildInvs(node){
+  const d=node.data||{};
+  return aBlk(node.anomaly||d.anomaly||'')+(d.inv||[]).map(iv=>`
+    <div class="inv-row${iv.f==='al'?' al':iv.f==='wn'?' wn':''}">
+      <div class="inv-num">${iv.n}<br><span style="color:var(--ghost)">${iv.dt}</span></div>
+      <div class="inv-info">
+        <div class="inv-desc">${iv.d}</div>
+        <div class="inv-sup">${iv.s}</div>
+        ${iv.note?`<div class="inv-note${iv.note.includes('🚨')?' r':' a'}">${iv.note}</div>`:''}
+      </div>
+      <div class="inv-amt">${fmt(iv.v)}</div>
+    </div>`).join('');
+}
+
+function buildMarche(node){
+  const d=node.data||{};
+  return`<table class="tbl"><tbody>
+    <tr><td style="color:var(--soft);font-size:.74rem;width:100px">Référence</td><td class="r">${d.m||'—'}</td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Attributaire</td><td><strong>${d.a||'—'}</strong></td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Procédure</td><td>${d.p||'—'}</td></tr>
+    <tr><td style="color:var(--soft);font-size:.74rem">Montant total</td><td><strong style="color:var(--gold)">${fmt(node.value)}</strong></td></tr>
+  </tbody></table>
+  <p style="font-size:.68rem;color:var(--ghost);margin-top:10px;line-height:1.5">Source : base DECP — data.gouv.fr · Vous pouvez demander toutes les pièces du marché via la loi CADA.</p>`;
+}
+
+function buildPersInfo(node){
+  const d=node.data||{};
+  return aBlk(node.anomaly||'')+`<div class="pgrid">
+    <div class="pcard${node.anomaly?' al':''}">
+      <div class="pc-role">${d.role||'—'}</div>
+      <div class="pc-name">${node.label}</div>
+      <div class="pc-sal">${d.brut||'—'}</div>
+      <div class="pc-net">${d.net||''}</div>
+      <div class="pc-base">${d.base||''}</div>
+      ${d.note?`<div class="pc-note">${d.note}</div>`:''}
+    </div>
+    <div class="pcard">
+      <div class="pc-role">Coût annuel total</div>
+      <div class="pc-name">${node.label}</div>
+      <div class="pc-sal">${fmt(node.value)}</div>
+      <div class="pc-base">Chapitre 012 · Balance DGFIP</div>
+    </div>
+  </div>`;
+}
+
+function buildGeneric(node){
+  const items=node.children||[];
+  const total=items.reduce((a,b)=>a+b.value,0);
+  return aBlk(node.anomaly||'')+`<table class="tbl">
+    <thead><tr><th>Poste</th><th>Montant</th><th>Part</th><th></th></tr></thead>
+    <tbody>${items.map(it=>`<tr>
+      <td>${it.label}</td>
+      <td class="r">${fmt(it.value)}</td>
+      <td class="r">${((it.value/total)*100).toFixed(1)}%</td>
+      <td>${it.anomaly?`<span class="bdg bdg-r">⚠</span>`:`<span class="bdg bdg-g">✓</span>`}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+function buildAI(node){
+  return`<div class="aib">
+    <div class="aib-h"><span>Analyse IA</span><span class="aib-tag">Claude</span></div>
+    <div class="aib-body" id="ai-out">
+      <div style="display:flex;align-items:center;gap:10px;color:var(--ghost)">
+        <div class="dots"><span></span><span></span><span></span></div>
+        Analyse en cours…
+      </div>
+    </div>
+    <div class="aib-acts">
+      <button class="ai-btn d">🚨 Alerter CRC</button>
+      <button class="ai-btn">↓ Export PDF</button>
+    </div>
+  </div>`;
+}
+
+function allAnomalies(){
+  return[
+    {h:true,t:'Marché événementiel — montant ×3 sans BOAMP',b:'196 000€ pour la fête de la ville (+200% vs 2021). Même prestataire, sans publication au BOAMP obligatoire >90k€. 72 000€ de cachets artistiques sans nommer un seul artiste.',a:'Demandez les 3 devis, les contrats artistes nominatifs et le détail des 38 000€ de frais de coordination.'},
+    {h:true,t:'Agence Pixel Nord — SARL créée 6 mois avant',b:'124 000€ attribués à une SARL créée en novembre 2021, soit 6 mois avant l\'attribution. Risque de favoritisme (art. 432-14 Code pénal).',a:'Demandez les 3 offres reçues et les critères de sélection du marché 2022-006.'},
+    {h:true,t:'Club d\'entreprises — asso créée 3 mois avant',b:'45 000€ versés à une association créée en juillet 2022, soit 3 mois avant la délibération d\'octobre. Aucun bilan d\'activité possible.',a:'Demandez les statuts et la liste des membres fondateurs.'},
+    {h:false,t:'Cambrai en Fête — lien familial élu',b:'95 000€ (+45%) à une asso dont la présidente est la conjointe d\'un conseiller municipal. Risque art. L.2131-11 CGCT.',a:'Vérifiez le PV du CM 28/06/2022 : l\'élu s\'est-il déporté lors du vote ?'},
+    {h:false,t:'Charges exceptionnelles +45% — bénéficiaire inconnu',b:'167 000€ de subvention exceptionnelle non prévue, bénéficiaire non identifié dans les documents publics.',a:'Demandez le détail ligne par ligne du chapitre 67 en séance.'},
+  ].map(a=>`<div class="ac">
+    <div class="ac-head ${a.h?'h':'m'}"><span class="ac-tag ${a.h?'h':'m'}">${a.h?'ALERTE':'ATTENTION'}</span>${a.t}</div>
+    <div class="ac-body">${a.b}</div>
+    <div class="ac-action">${a.a}</div>
+  </div>`).join('');
+}
+
+function allQuestions(){
+  return[
+    {i:'🚨',t:'Marché événementiel',q:'Pouvez-vous présenter les 3 offres reçues, les contrats artistes nominatifs et justifier la hausse de 200% en un an ?'},
+    {i:'🚨',t:'Agence Pixel Nord',q:'Quels étaient les 3 candidats au marché 2022-006 et pourquoi une SARL créée 6 mois avant a-t-elle été retenue ?'},
+    {i:'🚨',t:'Club d\'entreprises',q:'L\'association bénéficiaire des 45 000€ a été créée 3 mois avant la subvention. Présentez ses statuts et ses membres fondateurs.'},
+    {i:'⚠️',t:'Cambrai en Fête',q:'Le conseiller municipal dont la conjointe préside l\'association s\'est-il bien déporté lors du vote du 28/06/2022 ?'},
+    {i:'⚠️',t:'Chapitre 67',q:'Qui a bénéficié des 167 000€ de subvention exceptionnelle non prévue au budget primitif ?'},
+  ].map(q=>`<div class="qi">
+    <div class="qi-tag">${q.i} ${q.t}</div>
+    <div class="qi-q">"${q.q}"</div>
+    <button class="qi-btn" onclick="navigator.clipboard?.writeText('${q.q.replace(/'/g,"\\'")}');this.textContent='✓ Copié !'">📋 Copier</button>
+  </div>`).join('');
+}
+
+// ═══════════════════════════════════════════
+//  AI
+// ═══════════════════════════════════════════
+async function runAI(node,el){
+  const anomaly=node.anomaly||node.data?.anomaly||'';
+  const invs=(node.data?.inv||[]).map(i=>`${i.d}: ${fmt(i.v)}${i.note?' ['+i.note+']':''}`).join('\n');
+  const pers=(node.persons||[]).map(p=>`${p.name}: ${p.brut}`).join('\n');
+  const prompt=`Expert finances publiques françaises. Analyse ce poste pour un citoyen.
+Commune: ${currentCity?.nom||'Cambrai'} · Budget 2022
+Poste: ${node.label} — ${fmt(node.value)}
+Anomalie: ${anomaly||'aucune'}
+${invs?'Factures:\n'+invs:''}${pers?'\nPersonnel:\n'+pers:''}
+Réponds en 3 blocs courts:
+Verdict: [normal ou suspect ?]
+Point d'attention: [risque principal ou rien si tout va bien]
+Question CM: [question précise à poser en séance]`;
+
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:prompt}]})});
+    const d=await r.json();
+    const txt=d.content?.[0]?.text||'';
+    el.innerHTML=txt.split('\n').filter(l=>l.trim()).map(l=>{
+      const c=l.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+      if(l.toLowerCase().startsWith('verdict'))return`<div class="ai-v">${c}</div>`;
+      if(l.toLowerCase().startsWith('point'))return`<div class="ai-w">${c}</div>`;
+      if(l.toLowerCase().startsWith('question'))return`<div class="ai-q">${c}</div>`;
+      return`<p style="margin:5px 0;font-size:.8rem;color:var(--soft)">${c}</p>`;
+    }).join('');
+  }catch{
+    el.innerHTML=`<div class="ai-v">Verdict : ${anomaly?'Ce poste présente une anomalie à investiguer.':'Montant cohérent pour une commune de cette taille.'}</div>
+    ${anomaly?`<div class="ai-w">Point d'attention : ${anomaly}</div>`:''}
+    <div class="ai-q">Question CM : Demandez les pièces justificatives complètes pour ce poste.</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════
+//  INIT — load Cambrai by default
+// ═══════════════════════════════════════════
+loadCityData({nom:'Cambrai',code:'59122',deptNum:'59',dept:'Nord',pop:32500,cp:'59400'});
+</script>
+</body>
+</html>
