@@ -1475,11 +1475,12 @@ function openDrawer(node){
 }
 
 function openAllAnomalies(){
+  const anomCount=(ROOT.anomalies_auto||[]).length||allAnomalies().split('<div class="ac">').length-1;
   document.getElementById('drw-color').style.background='#f0b429';
   document.getElementById('drw-title').textContent='Alertes & questions CM';
-  document.getElementById('drw-amt').textContent='5 anomalies';
+  document.getElementById('drw-amt').textContent=`${anomCount} anomalie${anomCount>1?'s':''}`;
   document.getElementById('drw-tabs').innerHTML=`
-    <div class="dtab on" onclick="switchTab('al')" data-id="al">🚨 Alertes (5)</div>
+    <div class="dtab on" onclick="switchTab('al')" data-id="al">🚨 Alertes (${anomCount})</div>
     <div class="dtab" onclick="switchTab('qu')" data-id="qu">❓ Questions CM</div>
     <div class="dtab" onclick="switchTab('ai')" data-id="ai">🤖 IA</div>`;
   document.getElementById('drw-body').innerHTML=`
@@ -1663,9 +1664,9 @@ Point d'attention: [risque principal ou rien si tout va bien]
 Question CM: [question précise à poser en séance]`;
 
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:prompt}]})});
+    const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     const d=await r.json();
-    const txt=d.content?.[0]?.text||'';
+    const txt=d.text||'';
     el.innerHTML=txt.split('\n').filter(l=>l.trim()).map(l=>{
       const c=l.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
       if(l.toLowerCase().startsWith('verdict'))return`<div class="ai-v">${c}</div>`;

@@ -61,12 +61,13 @@ module.exports = async (req, res) => {
     const geoInfo = await fetchGeo(insee);
     const nomCommune = geoInfo.nom || '';
 
-    // SIRET commune = "2" + dept(3) + commune(5 sans dept) + "00018" (siège)
+    // SIRET commune = siren (9 chiffres) + "00018" (siège principal)
     // Ex: Cambrai 59122 → siren 215901224, ident 21590122400018
-    const ident = geoInfo.siren ? geoInfo.siren + '00018' : `2${insee}00018`.replace(/^2(\d{2})(\d{3})/, '2$1$2');
+    // Le siren est fourni par geo.api.gouv.fr ; sans lui on ne peut pas le reconstruire fiablement
+    const ident = geoInfo.siren ? geoInfo.siren + '00018' : null;
 
     const [balances, marches, subventions] = await Promise.all([
-      fetchBalances(nomCommune),
+      fetchBalances(ident, nomCommune),
       fetchMarches(ident, nomCommune),
       fetchSubventions(nomCommune),
     ]);
@@ -99,11 +100,14 @@ async function fetchGeo(insee) {
   return r.json();
 }
 
-async function fetchBalances(nomCommune) {
-  // Balances comptables DGFIP — le champ "insee" du dataset est tronqué,
-  // on filtre par lbudg (nom commune) + budget principal (cbudg=1)
+async function fetchBalances(ident, nomCommune) {
+  // Balances comptables DGFIP — filtre prioritaire par ident (SIRET), fallback par lbudg
+  // Le champ "insee" du dataset est tronqué et peu fiable
+  const where = ident
+    ? `ident = "${ident}" AND cbudg = "1"`
+    : `lbudg = "${nomCommune.toUpperCase()}" AND cbudg = "1"`;
   const params = new URLSearchParams({
-    where: `lbudg = "${nomCommune.toUpperCase()}" AND cbudg = "1"`,
+    where,
     select: 'compte, sd, sc',
     limit: '200',
   });
@@ -114,10 +118,11 @@ async function fetchBalances(nomCommune) {
 }
 
 async function fetchMarches(ident, nomCommune) {
-  // DECP: acheteur_id = SIRET commune
+  // DECP: acheteur_id = SIRET commune — sans ident on ne peut pas filtrer fiablement
+  if (!ident) return [];
   const params = new URLSearchParams({
     where: `acheteur_id = "${ident}"`,
-    select: 'id, objet, montant, datepublicationdonnees, procedure',
+    select: 'id, objet, montant, datepublicationdonnees, procedure, titulaire_denominationsociale',
     order_by: 'datepublicationdonnees DESC',
     limit: '50',
   });
@@ -176,7 +181,7 @@ function aggregate(insee, geo, balances, marches, subventions) {
   const marchesClean = marches.map(m => ({
     ref: m.id || '',
     objet: m.objet || '',
-    attributaire: '',
+    attributaire: m.titulaire_denominationsociale || '',
     montant: Number(m.montant) || 0,
     date: m.datepublicationdonnees || '',
     procedure: m.procedure || '',
