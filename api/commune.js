@@ -61,12 +61,13 @@ module.exports = async (req, res) => {
     const geoInfo = await fetchGeo(insee);
     const nomCommune = geoInfo.nom || '';
 
-    // SIRET commune = "2" + dept(3) + commune(5 sans dept) + "00018" (siège)
+    // SIRET commune = siren (9 chiffres) + "00018" (siège principal)
     // Ex: Cambrai 59122 → siren 215901224, ident 21590122400018
-    const ident = geoInfo.siren ? geoInfo.siren + '00018' : `2${insee}00018`.replace(/^2(\d{2})(\d{3})/, '2$1$2');
+    // Le siren est fourni par geo.api.gouv.fr ; sans lui on ne peut pas le reconstruire fiablement
+    const ident = geoInfo.siren ? geoInfo.siren + '00018' : null;
 
     const [balances, marches, subventions] = await Promise.all([
-      fetchBalances(nomCommune),
+      fetchBalances(ident, nomCommune),
       fetchMarches(ident, nomCommune),
       fetchSubventions(nomCommune),
     ]);
@@ -74,13 +75,18 @@ module.exports = async (req, res) => {
     // ── 3. Agrégation ───────────────────────────────────
     const result = aggregate(insee, geoInfo, balances, marches, subventions);
 
-    // ── 4. Stockage cache (upsert) ──────────────────────
-    await sb.from('cache_communes').upsert({
-      insee,
-      nom: result.nom,
-      data: result,
-      cached_at: new Date().toISOString(),
-    });
+    // ── 4. Stockage cache (upsert) — seulement si on a des données réelles ──
+    // Ne pas cacher un résultat vide : la prochaine requête retenterait les APIs
+    if (result.budget_total > 0) {
+      await sb.from('cache_communes').upsert({
+        insee,
+        nom: result.nom,
+        data: result,
+        cached_at: new Date().toISOString(),
+      });
+    } else {
+      console.warn(`commune ${insee}: budget_total=0, résultat non mis en cache`);
+    }
 
     return res.status(200).json(result);
   } catch (err) {
@@ -99,14 +105,21 @@ async function fetchGeo(insee) {
   return r.json();
 }
 
-async function fetchBalances(nomCommune) {
-  // Balances comptables DGFIP — le champ "insee" du dataset est tronqué,
-  // on filtre par lbudg (nom commune) + budget principal (cbudg=1)
-  const params = new URLSearchParams({
-    where: `lbudg = "${nomCommune.toUpperCase()}" AND cbudg = "1"`,
-    select: 'compte, sd, sc',
-    limit: '200',
-  });
+async function fetchBalances(ident, nomCommune) {
+  // Filtre prioritaire par ident (SIRET 14 chiffres) — plus robuste que le nom
+  // Si le SIRET est connu mais renvoie 0 résultats (ex: différence de format dans le dataset),
+  // on retente automatiquement par lbudg (nom en majuscules)
+  if (ident) {
+    const byIdent = await fetchBalancesWhere(`ident = "${ident}" AND cbudg = "1"`);
+    if (byIdent.length > 0) return byIdent;
+    console.warn(`fetchBalances: 0 résultats pour ident="${ident}", retry par lbudg`);
+  }
+  if (!nomCommune) return [];
+  return fetchBalancesWhere(`lbudg = "${nomCommune.toUpperCase()}" AND cbudg = "1"`);
+}
+
+async function fetchBalancesWhere(where) {
+  const params = new URLSearchParams({ where, select: 'compte, sd, sc', limit: '200' });
   const r = await fetch(`${DGFIP_URL}?${params}`);
   if (!r.ok) return [];
   const json = await r.json();
@@ -114,10 +127,11 @@ async function fetchBalances(nomCommune) {
 }
 
 async function fetchMarches(ident, nomCommune) {
-  // DECP: acheteur_id = SIRET commune
+  // DECP: acheteur_id = SIRET commune — sans ident on ne peut pas filtrer fiablement
+  if (!ident) return [];
   const params = new URLSearchParams({
     where: `acheteur_id = "${ident}"`,
-    select: 'id, objet, montant, datepublicationdonnees, procedure',
+    select: 'id, objet, montant, datepublicationdonnees, procedure, titulaire_denominationsociale',
     order_by: 'datepublicationdonnees DESC',
     limit: '50',
   });
@@ -176,7 +190,7 @@ function aggregate(insee, geo, balances, marches, subventions) {
   const marchesClean = marches.map(m => ({
     ref: m.id || '',
     objet: m.objet || '',
-    attributaire: '',
+    attributaire: m.titulaire_denominationsociale || '',
     montant: Number(m.montant) || 0,
     date: m.datepublicationdonnees || '',
     procedure: m.procedure || '',
@@ -205,11 +219,39 @@ function aggregate(insee, geo, balances, marches, subventions) {
 
   // ── Anomalies automatiques ────────────────────────────
   const anomalies = [];
+
+  // 1. Ratio de personnel élevé (> 35 %)
   if (kpis.ratio_personnel > 35) {
     anomalies.push({ type: 'ratio_personnel_eleve', valeur: kpis.ratio_personnel, seuil: 35, severite: 'warning' });
   }
 
-  // Marchés reconduits > 3 fois (même attributaire + objet similaire)
+  // 2. Endettement élevé (> 1 500 €/habitant)
+  if (population > 0 && kpis.dette_par_habitant > 1500) {
+    anomalies.push({ type: 'dette_elevee', valeur: kpis.dette_par_habitant, seuil: 1500, severite: 'warning' });
+  }
+
+  // 3. Investissement faible (< 10 % du budget, seulement si budget > 500k pour éviter le bruit)
+  if (budgetTotal > 500000 && kpis.ratio_investissement < 10 && kpis.ratio_investissement > 0) {
+    anomalies.push({ type: 'investissement_faible', valeur: kpis.ratio_investissement, seuil: 10, severite: 'warning' });
+  }
+
+  // 4. Marchés MAPA au-dessus du seuil légal pour les collectivités (214 000 € HT en 2023)
+  const SEUIL_AO_COLLECTIVITES = 214000;
+  for (const m of marchesClean) {
+    if (m.procedure && /adapt[eé]/i.test(m.procedure) && m.montant > SEUIL_AO_COLLECTIVITES) {
+      anomalies.push({
+        type: 'marche_mapa_seuil',
+        valeur: m.montant,
+        seuil: SEUIL_AO_COLLECTIVITES,
+        ref: m.ref,
+        objet: m.objet,
+        attributaire: m.attributaire,
+        severite: 'error',
+      });
+    }
+  }
+
+  // 5. Marchés reconduits > 3 fois (même attributaire)
   const marcheCount = {};
   for (const m of marchesClean) {
     const key = m.attributaire.toLowerCase();

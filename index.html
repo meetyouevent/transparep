@@ -736,6 +736,36 @@ canvas#pie{
 //  PALETTE & ICONS
 // ═══════════════════════════════════════════
 const COLORS = ['#e05c5c','#e8874d','#d4a017','#5fa86e','#4a8fd4','#8a6bc4','#4aada6','#c46b8a','#7ab0d4','#d4a06b'];
+
+// Anomalies structurées pour le mode démo (données fictives de Cambrai)
+// Format compatible avec anomalyCard() et anomalyQuestion()
+const DEMO_ANOMALIES_AUTO = [
+  { type:'demo_marche', severite:'error',
+    titre:"Marché événementiel — montant ×3 sans BOAMP",
+    detail:"196 000€ pour la fête de la ville (+200% vs 2021). Même prestataire, sans publication au BOAMP obligatoire >90k€. 72 000€ de cachets artistiques sans nommer un seul artiste.",
+    action:"Demandez les 3 devis, les contrats artistes nominatifs et le détail des 38 000€ de frais de coordination.",
+    question:"Pouvez-vous présenter les 3 offres reçues, les contrats artistes nominatifs et justifier la hausse de 200% en un an ?" },
+  { type:'demo_fournisseur', severite:'error',
+    titre:"Agence Pixel Nord — SARL créée 6 mois avant",
+    detail:"124 000€ attribués à une SARL créée en novembre 2021, soit 6 mois avant l'attribution. Risque de favoritisme (art. 432-14 Code pénal).",
+    action:"Demandez les 3 offres reçues et les critères de sélection du marché 2022-006.",
+    question:"Quels étaient les 3 candidats au marché 2022-006 et pourquoi une SARL créée 6 mois avant a-t-elle été retenue ?" },
+  { type:'demo_asso', severite:'error',
+    titre:"Club d'entreprises — association créée 3 mois avant",
+    detail:"45 000€ versés à une association créée en juillet 2022, soit 3 mois avant la délibération d'octobre. Aucun bilan d'activité possible.",
+    action:"Demandez les statuts et la liste des membres fondateurs.",
+    question:"L'association bénéficiaire des 45 000€ a été créée 3 mois avant la subvention. Présentez ses statuts et ses membres fondateurs." },
+  { type:'demo_lien', severite:'warning',
+    titre:"Cambrai en Fête — lien familial avec un élu",
+    detail:"95 000€ (+45%) à une association dont la présidente est la conjointe d'un conseiller municipal. Risque art. L.2131-11 CGCT.",
+    action:"Vérifiez le PV du CM 28/06/2022 : l'élu s'est-il déporté lors du vote ?",
+    question:"Le conseiller municipal dont la conjointe préside l'association s'est-il bien déporté lors du vote du 28/06/2022 ?" },
+  { type:'demo_chap67', severite:'warning',
+    titre:"Charges exceptionnelles +45% — bénéficiaire inconnu",
+    detail:"167 000€ de subvention exceptionnelle non prévue, bénéficiaire non identifié dans les documents publics.",
+    action:"Demandez le détail ligne par ligne du chapitre 67 en séance.",
+    question:"Qui a bénéficié des 167 000€ de subvention exceptionnelle non prévue au budget primitif ?" },
+];
 const ICONS = {
   'Charges de personnel':'👥','Charges générales':'🛒',
   'Subventions':'🤝','Investissement':'🏗️',
@@ -1418,13 +1448,15 @@ async function loadCityData(city){
     showToast(`📊 Données DGFIP ${data.annee||2023} · ${city.nom}`);
   }catch(err){
     console.error('loadCityData error:', err);
-    // Fallback: données fictives
+    // Fallback: données fictives avec anomalies structurées
     loTxt.innerHTML=`<span class="lo-err">⚠ ${err.message}<br>Chargement des données de démo…</span>`;
     setTimeout(()=>{
       ROOT=makeRoot(city.nom);
+      ROOT.anomalies_auto=DEMO_ANOMALIES_AUTO;
       nav=[ROOT];hiIdx=-1;
+      const n=DEMO_ANOMALIES_AUTO.length;
       document.getElementById('alert-badge').style.display='flex';
-      document.getElementById('alert-num').textContent='5';
+      document.getElementById('alert-num').textContent=String(n);
       lo.classList.remove('on');
       render(true);
       showToast(`📊 Données de démo · ${city.nom}`);
@@ -1475,11 +1507,12 @@ function openDrawer(node){
 }
 
 function openAllAnomalies(){
+  const anomCount=(ROOT.anomalies_auto||[]).length||allAnomalies().split('<div class="ac">').length-1;
   document.getElementById('drw-color').style.background='#f0b429';
   document.getElementById('drw-title').textContent='Alertes & questions CM';
-  document.getElementById('drw-amt').textContent='5 anomalies';
+  document.getElementById('drw-amt').textContent=`${anomCount} anomalie${anomCount>1?'s':''}`;
   document.getElementById('drw-tabs').innerHTML=`
-    <div class="dtab on" onclick="switchTab('al')" data-id="al">🚨 Alertes (5)</div>
+    <div class="dtab on" onclick="switchTab('al')" data-id="al">🚨 Alertes (${anomCount})</div>
     <div class="dtab" onclick="switchTab('qu')" data-id="qu">❓ Questions CM</div>
     <div class="dtab" onclick="switchTab('ai')" data-id="ai">🤖 IA</div>`;
   document.getElementById('drw-body').innerHTML=`
@@ -1617,32 +1650,107 @@ function buildAI(node){
   </div>`;
 }
 
+// ── Sanitation HTML pour données issues de l'API ──────────
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ── Rendu d'une anomalie → carte HTML ─────────────────────
+function anomalyCard(an){
+  const h=an.severite==='error';
+  let titre='',corps='',action='';
+  switch(an.type){
+    case'ratio_personnel_eleve':
+      titre=`Charges de personnel : ${esc(an.valeur)}% du budget`;
+      corps=`Les charges de personnel représentent <strong>${esc(an.valeur)}%</strong> des dépenses, au-dessus du seuil d'alerte de ${esc(an.seuil)}%. La moyenne nationale est d'environ 33%.`;
+      action='Demandez le tableau des effectifs et le détail des avancements de grade sur les 3 dernières années.';
+      break;
+    case'dette_elevee':
+      titre=`Endettement : ${esc(an.valeur)} €/habitant`;
+      corps=`La dette représente <strong>${esc(an.valeur)} €/habitant</strong>, au-dessus du seuil d'alerte de ${esc(an.seuil)} €. La moyenne nationale est d'environ 800 €/habitant pour les communes de taille comparable.`;
+      action="Demandez le tableau d'amortissement complet de chaque emprunt et les conditions de renégociation possibles.";
+      break;
+    case'investissement_faible':
+      titre=`Investissement faible : ${esc(an.valeur)}% du budget`;
+      corps=`Le taux d'investissement est de <strong>${esc(an.valeur)}%</strong>, en dessous du seuil de ${esc(an.seuil)}%. Un sous-investissement chronique dégrade le patrimoine communal à moyen terme.`;
+      action="Demandez le plan pluriannuel d'investissement (PPI) et l'état du patrimoine communal.";
+      break;
+    case'marche_mapa_seuil':
+      titre=`Marché MAPA dépassant le seuil légal${an.attributaire?' — '+esc(an.attributaire):''}`;
+      corps=`Un marché de <strong>${fmt(an.valeur)}</strong> a été passé en procédure adaptée (MAPA) alors que le seuil imposant un appel d'offres formalisé pour les collectivités est de ${fmt(an.seuil)} HT.${an.objet?' Objet : '+esc(an.objet)+'.':''}`;
+      action='Demandez les 3 devis reçus, les critères de sélection et la notification de rejet aux candidats non retenus.';
+      break;
+    case'marche_reconduit':
+      titre=`Marché reconduit ${esc(an.nombre)} fois — ${esc(an.attributaire)}`;
+      corps=`Le prestataire <strong>"${esc(an.attributaire)}"</strong> remporte ${esc(an.nombre)} marchés. Au-delà de ${esc(an.seuil)} reconductions sans remise en concurrence, le risque de favoritisme augmente significativement.`;
+      action='Demandez les cahiers des charges et les offres reçues pour chaque reconduction de ce prestataire.';
+      break;
+    default:
+      // Anomalies riches (mode démo ou types futurs avec titre/corps pré-remplis)
+      titre=an.titre||esc(an.type);
+      corps=an.detail||'';
+      action=an.action||'Demandez les pièces justificatives au prochain conseil municipal.';
+  }
+  return`<div class="ac">
+    <div class="ac-head ${h?'h':'m'}"><span class="ac-tag ${h?'h':'m'}">${h?'ALERTE':'ATTENTION'}</span>${titre}</div>
+    <div class="ac-body">${corps}</div>
+    <div class="ac-action">${action}</div>
+  </div>`;
+}
+
+// ── Rendu d'une anomalie → question CM ────────────────────
+function anomalyQuestion(an){
+  const h=an.severite==='error';
+  let tag='',q='';
+  switch(an.type){
+    case'ratio_personnel_eleve':
+      tag=`⚠️ Charges de personnel`;
+      q=`Les charges de personnel représentent ${an.valeur}% du budget, au-dessus de la moyenne nationale. Pouvez-vous présenter l'évolution des effectifs et des grades sur les 3 dernières années ?`;
+      break;
+    case'dette_elevee':
+      tag=`⚠️ Endettement`;
+      q=`La dette par habitant atteint ${an.valeur} €, supérieure au seuil d'alerte de ${an.seuil} €. Présentez le tableau d'amortissement complet et les conditions de renégociation possibles.`;
+      break;
+    case'investissement_faible':
+      tag=`⚠️ Investissement`;
+      q=`Le taux d'investissement est de ${an.valeur}% du budget. Quel est l'état du plan pluriannuel d'investissement et comment la commune prévoit-elle de maintenir son patrimoine ?`;
+      break;
+    case'marche_mapa_seuil':
+      tag=`🚨 Procédure marchés`;
+      q=`Un marché de ${fmt(an.valeur)}${an.objet?' ('+an.objet+')':''} a été passé en MAPA alors que le seuil légal est de ${fmt(an.seuil)} HT. Qui étaient les candidats et quels étaient les critères de sélection ?`;
+      break;
+    case'marche_reconduit':
+      tag=`⚠️ Marché — ${an.attributaire}`;
+      q=`Le prestataire "${an.attributaire}" apparaît ${an.nombre} fois dans les marchés publics. Quelles procédures de mise en concurrence ont été appliquées à chaque reconduction ?`;
+      break;
+    default:
+      tag=`${h?'🚨':'⚠️'} ${an.titre?an.titre.substring(0,40):an.type}`;
+      q=an.question||`Une anomalie a été détectée sur ce poste. Pouvez-vous fournir les pièces justificatives complètes ?`;
+  }
+  // Échappement JS pour l'attribut onclick
+  const qJs=q.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
+  return`<div class="qi">
+    <div class="qi-tag">${tag}</div>
+    <div class="qi-q">"${esc(q)}"</div>
+    <button class="qi-btn" onclick="navigator.clipboard?.writeText('${qJs}');this.textContent='✓ Copié !'">📋 Copier</button>
+  </div>`;
+}
+
 function allAnomalies(){
-  return[
-    {h:true,t:'Marché événementiel — montant ×3 sans BOAMP',b:'196 000€ pour la fête de la ville (+200% vs 2021). Même prestataire, sans publication au BOAMP obligatoire >90k€. 72 000€ de cachets artistiques sans nommer un seul artiste.',a:'Demandez les 3 devis, les contrats artistes nominatifs et le détail des 38 000€ de frais de coordination.'},
-    {h:true,t:'Agence Pixel Nord — SARL créée 6 mois avant',b:'124 000€ attribués à une SARL créée en novembre 2021, soit 6 mois avant l\'attribution. Risque de favoritisme (art. 432-14 Code pénal).',a:'Demandez les 3 offres reçues et les critères de sélection du marché 2022-006.'},
-    {h:true,t:'Club d\'entreprises — asso créée 3 mois avant',b:'45 000€ versés à une association créée en juillet 2022, soit 3 mois avant la délibération d\'octobre. Aucun bilan d\'activité possible.',a:'Demandez les statuts et la liste des membres fondateurs.'},
-    {h:false,t:'Cambrai en Fête — lien familial élu',b:'95 000€ (+45%) à une asso dont la présidente est la conjointe d\'un conseiller municipal. Risque art. L.2131-11 CGCT.',a:'Vérifiez le PV du CM 28/06/2022 : l\'élu s\'est-il déporté lors du vote ?'},
-    {h:false,t:'Charges exceptionnelles +45% — bénéficiaire inconnu',b:'167 000€ de subvention exceptionnelle non prévue, bénéficiaire non identifié dans les documents publics.',a:'Demandez le détail ligne par ligne du chapitre 67 en séance.'},
-  ].map(a=>`<div class="ac">
-    <div class="ac-head ${a.h?'h':'m'}"><span class="ac-tag ${a.h?'h':'m'}">${a.h?'ALERTE':'ATTENTION'}</span>${a.t}</div>
-    <div class="ac-body">${a.b}</div>
-    <div class="ac-action">${a.a}</div>
-  </div>`).join('');
+  const anomalies=ROOT.anomalies_auto||[];
+  if(!anomalies.length) return`<div class="so-empty" style="padding:30px 16px;text-align:center;color:var(--ghost)">
+    <div style="font-size:2rem;margin-bottom:10px">✅</div>
+    Aucune anomalie détectée<br>
+    <span style="font-size:.72rem;margin-top:6px;display:block">Sur les données DGFIP et DECP disponibles</span>
+  </div>`;
+  return anomalies.map(anomalyCard).join('');
 }
 
 function allQuestions(){
-  return[
-    {i:'🚨',t:'Marché événementiel',q:'Pouvez-vous présenter les 3 offres reçues, les contrats artistes nominatifs et justifier la hausse de 200% en un an ?'},
-    {i:'🚨',t:'Agence Pixel Nord',q:'Quels étaient les 3 candidats au marché 2022-006 et pourquoi une SARL créée 6 mois avant a-t-elle été retenue ?'},
-    {i:'🚨',t:'Club d\'entreprises',q:'L\'association bénéficiaire des 45 000€ a été créée 3 mois avant la subvention. Présentez ses statuts et ses membres fondateurs.'},
-    {i:'⚠️',t:'Cambrai en Fête',q:'Le conseiller municipal dont la conjointe préside l\'association s\'est-il bien déporté lors du vote du 28/06/2022 ?'},
-    {i:'⚠️',t:'Chapitre 67',q:'Qui a bénéficié des 167 000€ de subvention exceptionnelle non prévue au budget primitif ?'},
-  ].map(q=>`<div class="qi">
-    <div class="qi-tag">${q.i} ${q.t}</div>
-    <div class="qi-q">"${q.q}"</div>
-    <button class="qi-btn" onclick="navigator.clipboard?.writeText('${q.q.replace(/'/g,"\\'")}');this.textContent='✓ Copié !'">📋 Copier</button>
-  </div>`).join('');
+  const anomalies=ROOT.anomalies_auto||[];
+  if(!anomalies.length) return`<div class="so-empty" style="padding:30px 16px;text-align:center;color:var(--ghost)">
+    Aucune question générée<br>
+    <span style="font-size:.72rem;margin-top:6px;display:block">Les données ne révèlent pas d'anomalie à ce stade</span>
+  </div>`;
+  return anomalies.map(anomalyQuestion).join('');
 }
 
 // ═══════════════════════════════════════════
@@ -1663,9 +1771,9 @@ Point d'attention: [risque principal ou rien si tout va bien]
 Question CM: [question précise à poser en séance]`;
 
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:500,messages:[{role:'user',content:prompt}]})});
+    const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
     const d=await r.json();
-    const txt=d.content?.[0]?.text||'';
+    const txt=d.text||'';
     el.innerHTML=txt.split('\n').filter(l=>l.trim()).map(l=>{
       const c=l.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
       if(l.toLowerCase().startsWith('verdict'))return`<div class="ai-v">${c}</div>`;
