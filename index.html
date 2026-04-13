@@ -625,8 +625,54 @@ canvas#pie{
   color:var(--gold);z-index:40;
   display:none;pointer-events:none;
   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  gap:10px;align-items:center;
 }
-.demo-pill.vis{display:block;}
+.demo-pill.vis{display:flex;pointer-events:auto;}
+.pill-reload{
+  background:none;border:1px solid rgba(240,180,41,0.4);border-radius:10px;
+  padding:2px 8px;font-size:.58rem;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--gold);cursor:pointer;font-family:inherit;
+  transition:background .2s;
+}
+.pill-reload:hover{background:rgba(240,180,41,0.15);}
+.pill-reload:active{transform:scale(0.95);}
+
+/* Glossaire inline — tooltips sur abbr */
+abbr[data-tip]{
+  cursor:help;text-decoration:underline dotted rgba(230,238,255,0.4);
+  position:relative;white-space:nowrap;
+}
+abbr[data-tip]::after{
+  content:attr(data-tip);
+  position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:var(--mid);border:1px solid var(--rim+);border-radius:8px;
+  padding:6px 10px;font-size:.65rem;font-family:'Cabinet Grotesk',sans-serif;
+  color:var(--text);text-transform:none;letter-spacing:0;font-weight:400;
+  white-space:normal;max-width:220px;text-align:center;line-height:1.45;
+  pointer-events:none;opacity:0;transition:opacity .2s;z-index:200;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+}
+abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
+
+/* Focus visible pour navigation clavier */
+.icard:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.kcard:focus-visible{outline:2px solid var(--sky);outline-offset:2px;}
+
+/* ═══ @media print — Export PDF ════════════════════ */
+@media print{
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .topbar,.anom-bar,.bc-float,.loading-overlay,.demo-pill,
+  #toast,.overlay,.drawer,.back-btn,.drw-x{display:none!important;}
+  body{background:#fff!important;color:#06101d!important;overflow:visible;height:auto;}
+  .amb{display:none;}
+  .main-area{flex-direction:column!important;height:auto!important;overflow:visible!important;}
+  #pie-field{width:180px!important;height:180px!important;margin:0 auto 12px!important;flex-shrink:0!important;}
+  .panel-right{width:100%!important;overflow:visible!important;}
+  .items-scroll{overflow:visible!important;display:block!important;max-height:none!important;flex-direction:column!important;}
+  .icard{break-inside:avoid;margin-bottom:6px;border:1px solid #ccc!important;background:#f8f8f8!important;}
+  .kcard{break-inside:avoid;border:1px solid #ccc!important;background:#f0f4ff!important;}
+  .icard-name,.icard-amt,.icard-pct,.kcard-value,.kcard-label{color:#06101d!important;}
+}
 
 
 .dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--gold);margin-right:3px;animation:db 1.2s ease-in-out infinite;}
@@ -679,7 +725,7 @@ canvas#pie{
     </div>
   </div>
 
-  <div class="alert-badge" id="alert-badge" onclick="openAllAnomalies()" style="display:none">
+  <div class="alert-badge" id="alert-badge" role="button" tabindex="0" aria-label="Voir les anomalies détectées" onclick="openAllAnomalies()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAllAnomalies();}" style="display:none">
     <div class="alert-badge-num" id="alert-num">5</div>
     <div class="alert-dot"></div>
   </div>
@@ -692,10 +738,10 @@ canvas#pie{
     <div class="lf-tag" id="lf-tag">Budget communal</div>
     <div class="lf-name" id="lf-name" style="display:none"></div>
   </div>
-  <div class="bc-float" id="bc-float"></div>
+  <nav class="bc-float" id="bc-float" aria-label="Navigation fil d'Ariane"></nav>
 
   <!-- Back button -->
-  <div class="back-btn" id="back-btn" onclick="goBack()">
+  <div class="back-btn" id="back-btn" role="button" tabindex="0" aria-label="Retour au niveau précédent" onclick="goBack()" onkeydown="if(event.key==='Enter'){goBack();}">
     <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
   </div>
 
@@ -718,7 +764,7 @@ canvas#pie{
 
 <!-- ══ ITEMS STRIP ════════════════════════════ -->
 <div class="items-strip" id="items-strip">
-  <div class="anom-bar" id="anom-bar" onclick="openAllAnomalies()">
+  <div class="anom-bar" id="anom-bar" role="button" tabindex="0" aria-label="Voir les anomalies détectées" onclick="openAllAnomalies()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAllAnomalies();}">
     <div class="anom-bar-l">
       <div class="anom-bar-title">🚨 <span id="anom-count">2</span> anomalies à ce niveau</div>
       <div class="anom-bar-sub">Questions prêtes pour votre prochain CM</div>
@@ -736,6 +782,8 @@ canvas#pie{
       <input class="so-input" id="so-input"
         type="text" autocomplete="off" spellcheck="false"
         placeholder="Nom de votre commune…"
+        aria-label="Rechercher une commune" role="combobox"
+        aria-autocomplete="list" aria-expanded="false"
         inputmode="search" enterkeyhint="search"/>
       <button class="so-clear" id="so-clear" onclick="clearSO()">×</button>
     </div>
@@ -760,7 +808,7 @@ canvas#pie{
   <div class="drw-body" id="drw-body"></div>
 </div>
 
-<div class="demo-pill" id="demo-pill">⚠ Données de démo</div>
+<div class="demo-pill" id="demo-pill" role="status" aria-live="polite">⚠ Données de démo <button class="pill-reload" onclick="currentCity&&loadCityData(currentCity)" title="Recharger les données réelles">↺ Recharger</button></div>
 <div id="toast"></div>
 
 <script>
@@ -1213,7 +1261,11 @@ function buildCards(items,total){
       ${item.anomaly?`<div class="icard-badge">🚨</div>`:''}
       ${drill?`<div class="icard-drill">${drill}</div>`:''}
     `;
+    card.setAttribute('role','button');
+    card.setAttribute('tabindex','0');
+    card.setAttribute('aria-label',`${item.label} : ${fmt(item.value)}, ${pct}% du budget${item.anomaly?' — anomalie détectée':''}`);
     card.addEventListener('click',()=>clickItem(i));
+    card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();clickItem(i);}});
     // touch highlight synced to pie
     card.addEventListener('touchstart',()=>{hiIdx=i;redraw();},{passive:true});
     card.addEventListener('touchend',()=>{hiIdx=-1;redraw();},{passive:true});
@@ -1306,13 +1358,19 @@ let searchTimer=null, soResults=[], soFocus=-1;
 function openSearch(){
   const ov=document.getElementById('search-overlay');
   ov.classList.add('open');
-  setTimeout(()=>{ document.getElementById('so-input').focus(); },80);
+  setTimeout(()=>{
+    const inp=document.getElementById('so-input');
+    inp.focus();
+    inp.setAttribute('aria-expanded','true');
+  },80);
   showRecentResults();
 }
 
 function closeSearch(){
   document.getElementById('search-overlay').classList.remove('open');
-  document.getElementById('so-input').blur();
+  const inp=document.getElementById('so-input');
+  inp.blur();
+  inp.setAttribute('aria-expanded','false');
 }
 
 function clearSO(){
@@ -1329,9 +1387,9 @@ soInp.addEventListener('input',()=>{
   const q=soInp.value.trim();
   document.getElementById('so-clear').classList.toggle('vis',q.length>0);
   if(q.length===0){showRecentResults();return;}
-  if(q.length<2)return;
+  if(q.length<3)return;
   clearTimeout(searchTimer);
-  searchTimer=setTimeout(()=>searchGeo(q),200);
+  searchTimer=setTimeout(()=>searchGeo(q),300);
 });
 soInp.addEventListener('keydown',e=>{
   const items=document.querySelectorAll('.so-item');
@@ -1660,7 +1718,7 @@ function buildLegal(node){
     <tr><td style="color:var(--soft);font-size:.74rem">Net estimé</td><td>${p.net||'—'}</td></tr>
     <tr><td style="color:var(--soft);font-size:.74rem">Coût total/an</td><td><strong style="color:var(--gold)">${fmt(node.value)}</strong></td></tr>
   </tbody></table>
-  <p style="font-size:.68rem;color:var(--ghost);margin-top:12px;line-height:1.5">Grilles indiciaires fixées par décret — publiques et opposables. Toute modification de grade nécessite une délibération en conseil municipal.</p>`;
+  <p style="font-size:.68rem;color:var(--ghost);margin-top:12px;line-height:1.5">Grilles indiciaires fixées par décret — publiques et opposables (<abbr data-tip="Instruction budgétaire et comptable M14 : plan comptable applicable aux communes et EPCI">M14</abbr>, chapitre 012). Toute modification de grade nécessite une délibération en conseil municipal.</p>`;
 }
 
 function buildInvs(node){
@@ -1685,7 +1743,7 @@ function buildMarche(node){
     <tr><td style="color:var(--soft);font-size:.74rem">Procédure</td><td>${d.p||'—'}</td></tr>
     <tr><td style="color:var(--soft);font-size:.74rem">Montant total</td><td><strong style="color:var(--gold)">${fmt(node.value)}</strong></td></tr>
   </tbody></table>
-  <p style="font-size:.68rem;color:var(--ghost);margin-top:10px;line-height:1.5">Source : base DECP — data.gouv.fr · Vous pouvez demander toutes les pièces du marché via la loi CADA.</p>`;
+  <p style="font-size:.68rem;color:var(--ghost);margin-top:10px;line-height:1.5">Source : base <abbr data-tip="Données Essentielles de la Commande Publique : registre national des marchés publics publiés">DECP</abbr> — data.gouv.fr · Vous pouvez demander toutes les pièces du marché via la loi <abbr data-tip="Commission d'Accès aux Documents Administratifs : droit de toute personne à consulter et obtenir copie des documents administratifs publics">CADA</abbr>.</p>`;
 }
 
 function buildPersInfo(node){
@@ -1731,8 +1789,8 @@ function buildAI(node){
       </div>
     </div>
     <div class="aib-acts">
-      <button class="ai-btn d">🚨 Alerter CRC</button>
-      <button class="ai-btn">↓ Export PDF</button>
+      <button class="ai-btn d" title="Chambre Régionale des Comptes — organe de contrôle des finances locales">🚨 Alerter <abbr data-tip="Chambre Régionale des Comptes : contrôle les comptes et la gestion des collectivités locales">CRC</abbr></button>
+      <button class="ai-btn" onclick="window.print()">↓ Export PDF</button>
     </div>
   </div>`;
 }
@@ -1740,79 +1798,62 @@ function buildAI(node){
 // ── Sanitation HTML pour données issues de l'API ──────────
 const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-// ── Rendu d'une anomalie → carte HTML ─────────────────────
-function anomalyCard(an){
+// ── Rendu unifié d'une anomalie (view = 'card' | 'question') ─
+function renderAnomaly(an, view){
   const h=an.severite==='error';
-  let titre='',corps='',action='';
+  let titre='',corps='',action='',tag='',q='';
   switch(an.type){
     case'ratio_personnel_eleve':
       titre=`Charges de personnel : ${esc(an.valeur)}% du budget`;
       corps=`Les charges de personnel représentent <strong>${esc(an.valeur)}%</strong> des dépenses, au-dessus du seuil d'alerte de ${esc(an.seuil)}%. La moyenne nationale est d'environ 33%.`;
       action='Demandez le tableau des effectifs et le détail des avancements de grade sur les 3 dernières années.';
+      tag=`⚠️ Charges de personnel`;
+      q=`Les charges de personnel représentent ${an.valeur}% du budget, au-dessus de la moyenne nationale. Pouvez-vous présenter l'évolution des effectifs et des grades sur les 3 dernières années ?`;
       break;
     case'dette_elevee':
       titre=`Endettement : ${esc(an.valeur)} €/habitant`;
       corps=`La dette représente <strong>${esc(an.valeur)} €/habitant</strong>, au-dessus du seuil d'alerte de ${esc(an.seuil)} €. La moyenne nationale est d'environ 800 €/habitant pour les communes de taille comparable.`;
       action="Demandez le tableau d'amortissement complet de chaque emprunt et les conditions de renégociation possibles.";
+      tag=`⚠️ Endettement`;
+      q=`La dette par habitant atteint ${an.valeur} €, supérieure au seuil d'alerte de ${an.seuil} €. Présentez le tableau d'amortissement complet et les conditions de renégociation possibles.`;
       break;
     case'investissement_faible':
       titre=`Investissement faible : ${esc(an.valeur)}% du budget`;
       corps=`Le taux d'investissement est de <strong>${esc(an.valeur)}%</strong>, en dessous du seuil de ${esc(an.seuil)}%. Un sous-investissement chronique dégrade le patrimoine communal à moyen terme.`;
       action="Demandez le plan pluriannuel d'investissement (PPI) et l'état du patrimoine communal.";
+      tag=`⚠️ Investissement`;
+      q=`Le taux d'investissement est de ${an.valeur}% du budget. Quel est l'état du plan pluriannuel d'investissement et comment la commune prévoit-elle de maintenir son patrimoine ?`;
       break;
     case'marche_mapa_seuil':
-      titre=`Marché MAPA dépassant le seuil légal${an.attributaire?' — '+esc(an.attributaire):''}`;
-      corps=`Un marché de <strong>${fmt(an.valeur)}</strong> a été passé en procédure adaptée (MAPA) alors que le seuil imposant un appel d'offres formalisé pour les collectivités est de ${fmt(an.seuil)} HT.${an.objet?' Objet : '+esc(an.objet)+'.':''}`;
+      titre=`Marché <abbr data-tip="Marché À Procédure Adaptée : procédure simplifiée pour les marchés sous les seuils UE (214 k€ HT pour les collectivités)">MAPA</abbr> dépassant le seuil légal${an.attributaire?' — '+esc(an.attributaire):''}`;
+      corps=`Un marché de <strong>${fmt(an.valeur)}</strong> a été passé en procédure adaptée (<abbr data-tip="Marché À Procédure Adaptée : procédure simplifiée sous les seuils UE">MAPA</abbr>) alors que le seuil imposant un appel d'offres formalisé pour les collectivités est de ${fmt(an.seuil)} HT.${an.objet?' Objet : '+esc(an.objet)+'.':''}`;
       action='Demandez les 3 devis reçus, les critères de sélection et la notification de rejet aux candidats non retenus.';
+      tag=`🚨 Procédure marchés`;
+      q=`Un marché de ${fmt(an.valeur)}${an.objet?' ('+an.objet+')':''} a été passé en MAPA alors que le seuil légal est de ${fmt(an.seuil)} HT. Qui étaient les candidats et quels étaient les critères de sélection ?`;
       break;
     case'marche_reconduit':
       titre=`Marché reconduit ${esc(an.nombre)} fois — ${esc(an.attributaire)}`;
       corps=`Le prestataire <strong>"${esc(an.attributaire)}"</strong> remporte ${esc(an.nombre)} marchés. Au-delà de ${esc(an.seuil)} reconductions sans remise en concurrence, le risque de favoritisme augmente significativement.`;
       action='Demandez les cahiers des charges et les offres reçues pour chaque reconduction de ce prestataire.';
+      tag=`⚠️ Marché — ${an.attributaire}`;
+      q=`Le prestataire "${an.attributaire}" apparaît ${an.nombre} fois dans les marchés publics. Quelles procédures de mise en concurrence ont été appliquées à chaque reconduction ?`;
       break;
     default:
       // Anomalies riches (mode démo ou types futurs avec titre/corps pré-remplis)
       titre=an.titre||esc(an.type);
       corps=an.detail||'';
       action=an.action||'Demandez les pièces justificatives au prochain conseil municipal.';
-  }
-  return`<div class="ac">
-    <div class="ac-head ${h?'h':'m'}"><span class="ac-tag ${h?'h':'m'}">${h?'ALERTE':'ATTENTION'}</span>${titre}</div>
-    <div class="ac-body">${corps}</div>
-    <div class="ac-action">${action}</div>
-  </div>`;
-}
-
-// ── Rendu d'une anomalie → question CM ────────────────────
-function anomalyQuestion(an){
-  const h=an.severite==='error';
-  let tag='',q='';
-  switch(an.type){
-    case'ratio_personnel_eleve':
-      tag=`⚠️ Charges de personnel`;
-      q=`Les charges de personnel représentent ${an.valeur}% du budget, au-dessus de la moyenne nationale. Pouvez-vous présenter l'évolution des effectifs et des grades sur les 3 dernières années ?`;
-      break;
-    case'dette_elevee':
-      tag=`⚠️ Endettement`;
-      q=`La dette par habitant atteint ${an.valeur} €, supérieure au seuil d'alerte de ${an.seuil} €. Présentez le tableau d'amortissement complet et les conditions de renégociation possibles.`;
-      break;
-    case'investissement_faible':
-      tag=`⚠️ Investissement`;
-      q=`Le taux d'investissement est de ${an.valeur}% du budget. Quel est l'état du plan pluriannuel d'investissement et comment la commune prévoit-elle de maintenir son patrimoine ?`;
-      break;
-    case'marche_mapa_seuil':
-      tag=`🚨 Procédure marchés`;
-      q=`Un marché de ${fmt(an.valeur)}${an.objet?' ('+an.objet+')':''} a été passé en MAPA alors que le seuil légal est de ${fmt(an.seuil)} HT. Qui étaient les candidats et quels étaient les critères de sélection ?`;
-      break;
-    case'marche_reconduit':
-      tag=`⚠️ Marché — ${an.attributaire}`;
-      q=`Le prestataire "${an.attributaire}" apparaît ${an.nombre} fois dans les marchés publics. Quelles procédures de mise en concurrence ont été appliquées à chaque reconduction ?`;
-      break;
-    default:
       tag=`${h?'🚨':'⚠️'} ${an.titre?an.titre.substring(0,40):an.type}`;
       q=an.question||`Une anomalie a été détectée sur ce poste. Pouvez-vous fournir les pièces justificatives complètes ?`;
   }
-  // Échappement JS pour l'attribut onclick
+  if(view==='card'){
+    return`<div class="ac">
+      <div class="ac-head ${h?'h':'m'}"><span class="ac-tag ${h?'h':'m'}">${h?'ALERTE':'ATTENTION'}</span>${titre}</div>
+      <div class="ac-body">${corps}</div>
+      <div class="ac-action">${action}</div>
+    </div>`;
+  }
+  // view === 'question'
   const qJs=q.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');
   return`<div class="qi">
     <div class="qi-tag">${tag}</div>
@@ -1820,6 +1861,8 @@ function anomalyQuestion(an){
     <button class="qi-btn" onclick="navigator.clipboard?.writeText('${qJs}');this.textContent='✓ Copié !'">📋 Copier</button>
   </div>`;
 }
+function anomalyCard(an){return renderAnomaly(an,'card');}
+function anomalyQuestion(an){return renderAnomaly(an,'question');}
 
 function allAnomalies(){
   const anomalies=ROOT.anomalies_auto||[];
