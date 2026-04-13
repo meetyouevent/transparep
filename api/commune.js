@@ -117,8 +117,21 @@ module.exports = async (req, res) => {
 //  FETCH HELPERS
 // ═════════════════════════════════════════════════════════
 
+// ─── Fetch avec timeout ──────────────────────────────────
+// Évite de bloquer la serverless function 30s sur un timeout silencieux
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { ...options, signal: controller.signal });
+    return r;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 async function fetchGeo(insee) {
-  const r = await fetch(`${GEO_URL}/${insee}?fields=nom,population,codeDepartement,codesPostaux,siren`);
+  const r = await fetchWithTimeout(`${GEO_URL}/${insee}?fields=nom,population,codeDepartement,codesPostaux,siren`);
   if (!r.ok) throw new Error(`geo.api.gouv.fr ${r.status}`);
   return r.json();
 }
@@ -138,10 +151,12 @@ async function fetchBalances(ident, nomCommune) {
 
 async function fetchBalancesWhere(where) {
   const params = new URLSearchParams({ where, select: 'compte, sd, sc', limit: '200' });
-  const r = await fetch(`${DGFIP_URL}?${params}`);
-  if (!r.ok) return [];
-  const json = await r.json();
-  return json.results || [];
+  try {
+    const r = await fetchWithTimeout(`${DGFIP_URL}?${params}`);
+    if (!r.ok) return [];
+    const json = await r.json();
+    return json.results || [];
+  } catch { return []; }
 }
 
 async function fetchMarches(ident) {
@@ -153,10 +168,12 @@ async function fetchMarches(ident) {
     order_by: 'datepublicationdonnees DESC',
     limit: '50',
   });
-  const r = await fetch(`${DECP_URL}?${params}`);
-  if (!r.ok) return [];
-  const json = await r.json();
-  return json.results || [];
+  try {
+    const r = await fetchWithTimeout(`${DECP_URL}?${params}`);
+    if (!r.ok) return [];
+    const json = await r.json();
+    return json.results || [];
+  } catch { return []; }
 }
 
 async function fetchSubventions(nomCommune) {
@@ -169,7 +186,7 @@ async function fetchSubventions(nomCommune) {
       order_by: 'date_convention DESC',
       limit: '50',
     });
-    const r = await fetch(`${SUBV_URL}?${params}`);
+    const r = await fetchWithTimeout(`${SUBV_URL}?${params}`, {}, 4000);
     if (!r.ok) return [];
     const json = await r.json();
     return json.results || [];
