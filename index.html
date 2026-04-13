@@ -658,6 +658,43 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
 .icard:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 .kcard:focus-visible{outline:2px solid var(--sky);outline-offset:2px;}
 
+/* Score de transparence — dans le donut center */
+.dc-score{margin-top:5px;display:none;flex-direction:column;align-items:center;gap:1px;}
+.dc-score-val{font-family:'DM Mono',monospace;font-size:.62rem;font-weight:500;letter-spacing:.04em;transition:color .5s;}
+.dc-score-lbl{font-size:.44rem;font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ghost);}
+
+/* Carte de France — bouton d'entrée dans la recherche */
+.so-map-btn{
+  margin:0 0 10px;padding:11px 18px;
+  background:rgba(91,156,246,0.07);border:1px solid rgba(91,156,246,0.2);
+  border-radius:14px;cursor:pointer;text-align:center;
+  font-size:.78rem;font-weight:700;color:var(--sky);
+  transition:background .15s, border-color .15s;letter-spacing:.01em;
+}
+.so-map-btn:hover{background:rgba(91,156,246,0.14);border-color:rgba(91,156,246,0.35);}
+.so-map-btn:active{transform:scale(.98);}
+
+/* Carte de France — vue carte */
+.so-map-view{display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0;}
+.so-map-hdr{
+  display:flex;align-items:center;gap:10px;padding:0 0 10px;flex-shrink:0;
+}
+.so-map-back{
+  font-size:.7rem;font-weight:700;color:var(--sky);cursor:pointer;
+  padding:4px 10px;border:1px solid rgba(91,156,246,0.25);border-radius:10px;
+  transition:background .15s;flex-shrink:0;white-space:nowrap;
+}
+.so-map-back:hover{background:rgba(91,156,246,0.12);}
+.so-map-dept{flex:1;font-size:.8rem;font-weight:700;color:var(--gold);text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#map-cv{width:100%;border-radius:12px;cursor:crosshair;display:block;flex-shrink:0;}
+.so-map-label{
+  text-align:center;padding:6px 4px 2px;
+  font-size:.66rem;color:var(--ghost);font-family:'DM Mono',monospace;
+  min-height:22px;flex-shrink:0;
+}
+.so-map-list{overflow-y:auto;flex:1;min-height:0;scrollbar-width:none;}
+.so-map-list::-webkit-scrollbar{display:none;}
+
 /* ═══ @media print — Export PDF ════════════════════ */
 @media print{
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
@@ -774,6 +811,10 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
         Où va <strong>votre argent</strong> ?
       </div>
       <div class="dc-sub" id="dc-sub">Tapez une commune pour commencer</div>
+      <div class="dc-score" id="dc-score">
+        <span class="dc-score-val" id="dc-score-val"></span>
+        <span class="dc-score-lbl" id="dc-score-lbl"></span>
+      </div>
     </div>
   </div>
 </div>
@@ -805,7 +846,17 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
     </div>
     <div class="so-cancel" onclick="closeSearch()">Annuler</div>
   </div>
+  <div class="so-map-btn" id="so-map-btn" onclick="showMapView()" role="button" tabindex="0" onkeydown="if(event.key==='Enter')showMapView()">🗺 Parcourir par département</div>
   <div class="so-results" id="so-results"></div>
+  <div class="so-map-view" id="so-map-view">
+    <div class="so-map-hdr">
+      <div class="so-map-back" onclick="hideMapView()" role="button" tabindex="0" onkeydown="if(event.key==='Enter')hideMapView()">← Recherche</div>
+      <div class="so-map-dept" id="so-map-dept">France métropolitaine</div>
+    </div>
+    <canvas id="map-cv" aria-label="Carte des départements français"></canvas>
+    <div class="so-map-label" id="so-map-label" aria-live="polite"></div>
+    <div class="so-map-list" id="so-map-list"></div>
+  </div>
 </div>
 
 <!-- ══ OVERLAY ════════════════════════════════ -->
@@ -1107,6 +1158,20 @@ function render(anim=true){
     document.getElementById('dc-sub').textContent = depth===0?`budget total${anneeLabel}`:'sous-total';
   }
 
+  // Score de transparence
+  const scoreEl=document.getElementById('dc-score');
+  if(depth===0&&ROOT.budget_total>0){
+    const score=computeScore(ROOT.anomalies_auto||[]);
+    const color=score>=80?'#3ecf8e':score>=60?'#f0b429':'#ff6b6b';
+    const label=score>=80?'Gestion saine':score>=60?'Vigilance':'À surveiller';
+    document.getElementById('dc-score-val').textContent=score+'/100';
+    document.getElementById('dc-score-val').style.color=color;
+    document.getElementById('dc-score-lbl').textContent=label;
+    scoreEl.style.display='flex';
+  }else{
+    scoreEl.style.display='none';
+  }
+
   // Back
   document.getElementById('back-btn').classList.toggle('on', nav.length>1);
 
@@ -1397,12 +1462,18 @@ function closeSearch(){
   const inp=document.getElementById('so-input');
   inp.blur();
   inp.setAttribute('aria-expanded','false');
+  // Réinitialiser la vue carte si elle était ouverte
+  document.getElementById('so-map-view').style.display='none';
+  document.getElementById('so-results').style.display='';
+  document.getElementById('so-map-btn').style.display='';
+  _mapHiCode=null;
 }
 
 function clearSO(){
   const inp=document.getElementById('so-input');
   inp.value='';
   document.getElementById('so-clear').classList.remove('vis');
+  document.getElementById('so-map-btn').style.display='';
   soResults=[];soFocus=-1;
   showRecentResults();
   inp.focus();
@@ -1412,7 +1483,11 @@ const soInp=document.getElementById('so-input');
 soInp.addEventListener('input',()=>{
   const q=soInp.value.trim();
   document.getElementById('so-clear').classList.toggle('vis',q.length>0);
+  // Masquer le bouton carte quand on tape, sinon afficher
+  document.getElementById('so-map-btn').style.display=q.length>0?'none':'';
   if(q.length===0){showRecentResults();return;}
+  // Masquer la vue carte si elle était ouverte
+  if(document.getElementById('so-map-view').style.display==='flex') hideMapView();
   if(q.length<3)return;
   clearTimeout(searchTimer);
   searchTimer=setTimeout(()=>searchGeo(q),300);
@@ -2003,6 +2078,233 @@ Question CM: [question précise et concrète à poser en séance]`;
     <div class="ai-q">Question CM : Demandez les pièces justificatives complètes pour ce poste.</div>`;
   }
 }
+
+// ═══════════════════════════════════════════
+//  SCORE DE TRANSPARENCE
+// ═══════════════════════════════════════════
+function computeScore(anomalies){
+  let s=100;
+  for(const an of anomalies||[]){
+    switch(an.type){
+      case'ratio_personnel_eleve': s-=15; break;
+      case'dette_elevee':          s-=20; break;
+      case'investissement_faible': s-=10; break;
+      case'marche_mapa_seuil':     s-=25; break;
+      case'marche_reconduit':      s-=10; break;
+      default: s-=(an.severite==='error'?15:7);
+    }
+  }
+  return Math.max(0,Math.min(100,s));
+}
+
+// ═══════════════════════════════════════════
+//  CARTE DE FRANCE — canvas + geo API
+// ═══════════════════════════════════════════
+const LON_MIN=-5.5,LON_MAX=9.8,LAT_MIN=41.3,LAT_MAX=51.2;
+let _mapDepts=null,_mapPaths=null,_mapPathsW=0,_mapPathsH=0,_mapHiCode=null;
+const MAP_LS_KEY='tr_depts_geo_v2',MAP_LS_TTL=7*24*60*60*1000;
+
+function geoProj(lon,lat,W,H){
+  // Correction Mercator légère pour la France
+  const latRad=lat*Math.PI/180;
+  const y0=Math.log(Math.tan(Math.PI/4+LAT_MIN*Math.PI/360));
+  const y1=Math.log(Math.tan(Math.PI/4+LAT_MAX*Math.PI/360));
+  const yw=Math.log(Math.tan(Math.PI/4+latRad/2));
+  return[
+    (lon-LON_MIN)/(LON_MAX-LON_MIN)*W,
+    (1-(yw-y0)/(y1-y0))*H,
+  ];
+}
+
+function buildMapPaths(W,H){
+  return(_mapDepts||[]).map(dept=>{
+    const path=new Path2D();
+    const geom=dept.contour;
+    if(!geom)return{dept,path};
+    const polys=geom.type==='Polygon'?[geom.coordinates]:geom.coordinates;
+    for(const poly of polys){
+      for(const ring of poly){
+        const pts=ring.map(([lon,lat])=>geoProj(lon,lat,W,H));
+        if(!pts.length)continue;
+        path.moveTo(pts[0][0],pts[0][1]);
+        for(let i=1;i<pts.length;i++)path.lineTo(pts[i][0],pts[i][1]);
+        path.closePath();
+      }
+    }
+    return{dept,path};
+  });
+}
+
+function getMapPaths(W,H){
+  if(_mapPaths&&_mapPathsW===W&&_mapPathsH===H)return _mapPaths;
+  _mapPaths=buildMapPaths(W,H);
+  _mapPathsW=W;_mapPathsH=H;
+  return _mapPaths;
+}
+
+function drawMap(hiCode){
+  const cv=document.getElementById('map-cv');
+  if(!cv||!_mapDepts)return;
+  const dpr=devicePixelRatio||1;
+  const W=cv.parentElement.clientWidth;
+  // Aspect ratio : France approximativement 1.25× sa largeur en hauteur (projection Mercator)
+  const H=Math.round(W*0.75);
+  if(cv.width!==Math.round(W*dpr)||cv.height!==H*dpr){
+    cv.width=Math.round(W*dpr);cv.height=H*dpr;
+    cv.style.width=W+'px';cv.style.height=H+'px';
+    _mapPaths=null; // invalider le cache si la taille change
+  }
+  const ctx=cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  const paths=getMapPaths(W,H);
+  for(const{dept,path}of paths){
+    const hi=dept.code===hiCode;
+    ctx.fillStyle=hi?'rgba(240,180,41,0.45)':'rgba(91,156,246,0.18)';
+    ctx.fill(path);
+    ctx.strokeStyle=hi?'rgba(240,180,41,0.9)':'rgba(91,156,246,0.4)';
+    ctx.lineWidth=hi?1.5:0.6;
+    ctx.stroke(path);
+  }
+}
+
+function mapHitTest(px,py){
+  const cv=document.getElementById('map-cv');
+  if(!cv||!_mapPaths)return null;
+  const ctx=cv.getContext('2d');
+  for(const{dept,path}of _mapPaths){
+    if(ctx.isPointInPath(path,px,py))return dept;
+  }
+  return null;
+}
+
+async function showMapView(){
+  const btn=document.getElementById('so-map-btn');
+  const res=document.getElementById('so-results');
+  const mv=document.getElementById('so-map-view');
+  btn.style.display='none';
+  res.style.display='none';
+  mv.style.display='flex';
+  document.getElementById('so-map-dept').textContent='France métropolitaine';
+  document.getElementById('so-map-label').textContent='Chargement de la carte…';
+  document.getElementById('so-map-list').innerHTML='';
+
+  if(!_mapDepts){
+    try{
+      const raw=localStorage.getItem(MAP_LS_KEY);
+      if(raw){
+        const item=JSON.parse(raw);
+        if(Date.now()-item.ts<MAP_LS_TTL){_mapDepts=item.data;}
+      }
+    }catch{}
+  }
+
+  if(!_mapDepts){
+    try{
+      const r=await fetch('https://geo.api.gouv.fr/departements?fields=nom,code,contour&geometry=contour');
+      const data=await r.json();
+      // Filtrer DOM-TOM (codes >95, sauf 2A/2B)
+      _mapDepts=data.filter(d=>d.contour&&(!/^\d+$/.test(d.code)||parseInt(d.code)<=95));
+      try{localStorage.setItem(MAP_LS_KEY,JSON.stringify({ts:Date.now(),data:_mapDepts}));}catch{}
+    }catch(e){
+      document.getElementById('so-map-label').textContent='⚠ Carte indisponible — utilisez la recherche';
+      return;
+    }
+  }
+
+  drawMap(null);
+  const cv2=document.getElementById('map-cv');
+  if(cv2)cv2._mapReady=true;
+  document.getElementById('so-map-label').textContent='Survolez puis cliquez un département';
+}
+
+function hideMapView(){
+  document.getElementById('so-map-view').style.display='none';
+  document.getElementById('so-results').style.display='';
+  document.getElementById('so-map-btn').style.display='';
+  _mapHiCode=null;
+  document.getElementById('so-map-list').innerHTML='';
+  showRecentResults();
+}
+
+async function loadDeptCommunes(dept){
+  document.getElementById('so-map-dept').textContent=dept.nom+' ('+dept.code+')';
+  document.getElementById('so-map-label').textContent='Chargement des communes…';
+  const list=document.getElementById('so-map-list');
+  list.innerHTML='';
+  try{
+    const r=await fetch(`https://geo.api.gouv.fr/departements/${encodeURIComponent(dept.code)}/communes?fields=nom,code,codesPostaux,codeDepartement,departement,population&boost=population&limit=20`);
+    const communes=await r.json();
+    soResults=communes.map(c=>({
+      nom:c.nom,code:c.code,
+      dept:c.departement?.nom||c.codeDepartement,
+      deptNum:c.codeDepartement,
+      cp:c.codesPostaux?.[0]||'',
+      pop:c.population||0,
+    }));
+    if(!soResults.length){document.getElementById('so-map-label').textContent='Aucune commune trouvée';return;}
+    list.innerHTML=`<div class="so-section-head">${soResults.length} communes — par population</div>`+soResults.map((c,i)=>soItemHTML(c,i,cityEmoji(c.pop))).join('');
+    document.getElementById('so-map-label').textContent='Sélectionnez une commune';
+    // Bind clicks via event delegation sur so-map-list
+    list.querySelectorAll('.so-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=parseInt(el.dataset.idx);
+        if(soResults[idx])pickCity(soResults[idx]);
+      });
+    });
+  }catch{
+    document.getElementById('so-map-label').textContent='⚠ Erreur réseau';
+  }
+}
+
+// Événements canvas carte — délégués sur so-map-view
+(function(){
+  function getCanvasPt(e,cv){
+    const r=cv.getBoundingClientRect();
+    const dpr=devicePixelRatio||1;
+    return[
+      (e.clientX-r.left)*cv.width/r.width/dpr,
+      (e.clientY-r.top)*cv.height/r.height/dpr,
+    ];
+  }
+  const mv=document.getElementById('so-map-view');
+  mv.addEventListener('mousemove',e=>{
+    const cv=document.getElementById('map-cv');
+    if(!cv._mapReady||e.target!==cv)return;
+    const[px,py]=getCanvasPt(e,cv);
+    const dept=mapHitTest(px,py);
+    if(dept){
+      if(_mapHiCode!==dept.code){_mapHiCode=dept.code;drawMap(dept.code);}
+      document.getElementById('so-map-label').textContent=dept.nom+' ('+dept.code+')';
+      cv.style.cursor='pointer';
+    }else{
+      if(_mapHiCode){_mapHiCode=null;drawMap(null);}
+      document.getElementById('so-map-label').textContent='Survolez puis cliquez un département';
+      cv.style.cursor='crosshair';
+    }
+  });
+  mv.addEventListener('click',async e=>{
+    const cv=document.getElementById('map-cv');
+    if(!cv._mapReady||e.target!==cv)return;
+    const[px,py]=getCanvasPt(e,cv);
+    const dept=mapHitTest(px,py);
+    if(dept)await loadDeptCommunes(dept);
+  });
+  mv.addEventListener('touchend',async e=>{
+    const cv=document.getElementById('map-cv');
+    if(!cv||e.target!==cv)return;
+    e.preventDefault();
+    const t=e.changedTouches[0];
+    const[px,py]=getCanvasPt(t,cv);
+    const dept=mapHitTest(px,py);
+    if(dept){
+      drawMap(dept.code);
+      await loadDeptCommunes(dept);
+    }
+  },{passive:false});
+})();
+
+// _mapReady est positionné dans showMapView() après le premier drawMap
 
 // ═══════════════════════════════════════════
 //  INIT — permalink hash ou Cambrai par défaut
