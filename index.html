@@ -694,6 +694,18 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
 .overlay{position:fixed;inset:0;background:rgba(6,16,29,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:90;opacity:0;pointer-events:none;transition:opacity .3s;}
 .overlay.on{opacity:1;pointer-events:all;}
 
+/* Bouton partage */
+.share-btn{
+  flex-shrink:0;width:36px;height:36px;
+  background:var(--glass);border:1px solid var(--rim+);border-radius:50%;
+  backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--text);transition:all .2s;
+}
+.share-btn:hover{border-color:var(--sky);background:rgba(14,32,64,0.85);}
+.share-btn:active{transform:scale(.92);}
+.share-btn svg{width:14px;height:14px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+
 /* Toast */
 #toast{
   position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 90px);
@@ -724,6 +736,10 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
       <span class="sp-dept" id="sp-dept" style="display:none"></span>
     </div>
   </div>
+
+  <button class="share-btn" id="share-btn" style="display:none" onclick="shareCity()" title="Copier le lien vers cette commune" aria-label="Partager cette commune">
+    <svg viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+  </button>
 
   <div class="alert-badge" id="alert-badge" role="button" tabindex="0" aria-label="Voir les anomalies détectées" onclick="openAllAnomalies()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAllAnomalies();}" style="display:none">
     <div class="alert-badge-num" id="alert-num">5</div>
@@ -1320,6 +1336,16 @@ PIE.addEventListener('click',e=>{const idx=hit(e);if(idx>=0)clickItem(idx);});
 PIE.addEventListener('mousemove',e=>{const idx=hit(e);if(idx!==hiIdx){hiIdx=idx;redraw();}PIE.style.cursor=idx>=0?'pointer':'default';});
 PIE.addEventListener('mouseleave',()=>{hiIdx=-1;redraw();PIE.style.cursor='default';});
 window.addEventListener('resize',()=>render(false));
+
+// ─── Swipe horizontal sur la zone graphique : droite = retour ─
+let _swX=null;
+document.getElementById('pie-field').addEventListener('touchstart',e=>{_swX=e.touches[0].clientX;},{passive:true});
+document.getElementById('pie-field').addEventListener('touchend',e=>{
+  if(_swX===null)return;
+  const dx=e.changedTouches[0].clientX-_swX;
+  _swX=null;
+  if(dx>80&&nav.length>1)goBack(); // swipe droit > 80px → niveau précédent
+},{passive:true});
 document.addEventListener('keydown',e=>{if((e.key==='Escape'||e.key==='Backspace')&&document.activeElement.tagName!=='INPUT'){if(searchIsOpen())closeSearch();else goBack();}});
 
 // ═══════════════════════════════════════════
@@ -1463,6 +1489,7 @@ function bindSOItems(){
 function pickCity(city){
   saveRecent(city);
   closeSearch();
+  history.replaceState(null,'','#'+city.code);
   loadCityData(city);
 }
 
@@ -1545,7 +1572,38 @@ function buildTreeFromAPI(d){
 function fmtEur(v){return new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(v);}
 
 // ═══════════════════════════════════════════
-//  LOAD CITY — async with API call
+//  CACHE LOCALSTORAGE (TTL 1h)
+// ═══════════════════════════════════════════
+const LS_PFX='tr_data_v1_', LS_TTL=60*60*1000;
+function lsGet(insee){
+  try{
+    const raw=localStorage.getItem(LS_PFX+insee);
+    if(!raw)return null;
+    const item=JSON.parse(raw);
+    if(Date.now()-item.ts>LS_TTL){localStorage.removeItem(LS_PFX+insee);return null;}
+    return item.data;
+  }catch{return null;}
+}
+function lsSet(insee,data){
+  try{localStorage.setItem(LS_PFX+insee,JSON.stringify({ts:Date.now(),data}));}catch{}
+}
+
+// ─── Partage : copie le permalink dans le presse-papier ──
+function shareCity(){
+  if(!currentCity)return;
+  const url=location.origin+location.pathname+'#'+currentCity.code;
+  navigator.clipboard?.writeText(url).then(()=>showToast('🔗 Lien copié !'))
+    .catch(()=>{
+      // Fallback pour les navigateurs sans clipboard API
+      const inp=document.createElement('input');
+      inp.value=url;document.body.appendChild(inp);inp.select();
+      document.execCommand('copy');document.body.removeChild(inp);
+      showToast('🔗 Lien copié !');
+    });
+}
+
+// ═══════════════════════════════════════════
+//  LOAD CITY — async with localStorage + API
 // ═══════════════════════════════════════════
 async function loadCityData(city){
   currentCity=city;
@@ -1558,21 +1616,40 @@ async function loadCityData(city){
   deptEl.textContent=city.deptNum;
   deptEl.style.display='';
 
-  // Show loader
+  // Affiche le bouton de partage dès qu'une commune est chargée
+  document.getElementById('share-btn').style.display='';
+
+  const demoPill=document.getElementById('demo-pill');
+  demoPill.classList.remove('vis');
+
+  // ── Cache localStorage (1h) ───────────────────────
+  const lsData=lsGet(city.code);
+  if(lsData&&lsData.budget_total>0){
+    ROOT=buildTreeFromAPI(lsData);
+    nav=[ROOT];hiIdx=-1;
+    const anomCount=(lsData.anomalies_auto||[]).length;
+    document.getElementById('alert-badge').style.display=anomCount?'flex':'none';
+    document.getElementById('alert-num').textContent=String(anomCount);
+    render(true);
+    showToast(`📦 ${city.nom} · ${lsData.annee||''} (cache)`);
+    return;
+  }
+
+  // ── Fetch API ─────────────────────────────────────
   const lo=document.getElementById('loading-overlay');
   const loTxt=document.getElementById('lo-text');
   loTxt.textContent=`Chargement des données DGFIP…`;
   loTxt.classList.remove('lo-err');
   lo.classList.add('on');
 
-  const demoPill=document.getElementById('demo-pill');
-  demoPill.classList.remove('vis');
-
   try{
     const res=await fetch(`/api/commune?insee=${city.code}`);
     if(!res.ok) throw new Error(`Erreur serveur ${res.status}`);
     const data=await res.json();
     if(data.error) throw new Error(data.error);
+
+    // Mise en cache locale si données valides
+    if(data.budget_total>0) lsSet(city.code,data);
 
     ROOT=buildTreeFromAPI(data);
     nav=[ROOT];hiIdx=-1;
@@ -1585,14 +1662,12 @@ async function loadCityData(city){
     render(true);
 
     if(!data.budget_total||data.budget_total===0){
-      // L'API a répondu mais sans données budgétaires pour cette commune
       showToast(`⚠ Aucune donnée DGFIP disponible pour ${city.nom}`);
     }else{
       showToast(`📊 Données ${data.source||('DGFIP '+(data.annee||''))} · ${city.nom}`);
     }
   }catch(err){
     console.error('[loadCityData]', err.message);
-    // L'API est inaccessible ou en erreur → mode démo avec indication claire
     loTxt.innerHTML=`<span class="lo-err">⚠ ${esc(err.message)}<br>Chargement des données de démo…</span>`;
     setTimeout(()=>{
       ROOT=makeRoot(city.nom);
@@ -1930,9 +2005,31 @@ Question CM: [question précise et concrète à poser en séance]`;
 }
 
 // ═══════════════════════════════════════════
-//  INIT — load Cambrai by default
+//  INIT — permalink hash ou Cambrai par défaut
 // ═══════════════════════════════════════════
-loadCityData({nom:'Cambrai',code:'59122',deptNum:'59',dept:'Nord',pop:32500,cp:'59400'});
+const DEFAULT_CITY={nom:'Cambrai',code:'59122',deptNum:'59',dept:'Nord',pop:32500,cp:'59400'};
+
+async function initFromHash(){
+  const m=location.hash.match(/^#(\d{5})$/);
+  if(!m){loadCityData(DEFAULT_CITY);return;}
+  const insee=m[1];
+  try{
+    const r=await fetch(`https://geo.api.gouv.fr/communes/${insee}?fields=nom,code,codesPostaux,codeDepartement,departement,population`);
+    const c=await r.json();
+    if(!c.nom)throw new Error('not found');
+    const city={
+      nom:c.nom,code:c.code,
+      dept:c.departement?.nom||c.codeDepartement,
+      deptNum:c.codeDepartement,
+      cp:c.codesPostaux?.[0]||'',
+      pop:c.population||0,
+    };
+    loadCityData(city);
+  }catch{
+    loadCityData(DEFAULT_CITY);
+  }
+}
+initFromHash();
 </script>
 </body>
 </html>
