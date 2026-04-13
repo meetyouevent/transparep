@@ -13,9 +13,14 @@ const CORS = {
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
+// ─── Année des données (configurable via env) ────────────
+// Les données DGFIP sont publiées avec ~18-24 mois de décalage.
+// DGFIP_YEAR=2024 npm run dev pour forcer une année spécifique.
+const DATA_YEAR = parseInt(process.env.DGFIP_YEAR || '') || (new Date().getFullYear() - 2);
+
 // ─── APIs publiques ─────────────────────────────────────
-const DGFIP_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/balances-comptables-des-communes-en-2023/records';
-const DECP_URL  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-2022-marches-valides/records';
+const DGFIP_URL = `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/balances-comptables-des-communes-en-${DATA_YEAR}/records`;
+const DECP_URL  = `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-${DATA_YEAR}-marches-valides/records`;
 const SUBV_URL  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/dispositif-de-subventions-aux-associations/records';
 const GEO_URL   = 'https://geo.api.gouv.fr/communes';
 
@@ -33,6 +38,17 @@ const CHAPITRES_LIB = {
   '16':  'Remboursement d\'emprunts',
   '042': 'Opérations d\'ordre transfert entre sections',
 };
+
+// ─── Sanitization ODS WHERE ──────────────────────────────
+// Échappe les guillemets et backslashes dans les valeurs des clauses WHERE ODS API v2.1.
+// Évite les injections via des noms de communes contenant " ou \ (ex: Villiers-l'Évêque).
+function odsEsc(s) {
+  return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+// Même chose + échappement des wildcards LIKE (%, _)
+function odsEscLike(s) {
+  return odsEsc(s).replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
 
 module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).json({ ok: true });
@@ -53,30 +69,32 @@ module.exports = async (req, res) => {
       .eq('insee', insee)
       .single();
 
-    if (cached && cached.data.budget_total > 0 && (Date.now() - new Date(cached.cached_at).getTime()) < TTL_MS) {
+    const cachedBudget = cached?.data?.budget_total ?? 0;
+    if (cached && cachedBudget > 0 && (Date.now() - new Date(cached.cached_at).getTime()) < TTL_MS) {
       return res.status(200).json(cached.data);
     }
 
-    // ── 2. Cache miss → fetch geo d'abord (on a besoin du nom) ──
+    // ── 2. Cache miss → fetch geo d'abord ──────────────
     const geoInfo = await fetchGeo(insee);
     const nomCommune = geoInfo.nom || '';
 
-    // SIRET commune = siren (9 chiffres) + "00018" (siège principal)
-    // Ex: Cambrai 59122 → siren 215901224, ident 21590122400018
-    // Le siren est fourni par geo.api.gouv.fr ; sans lui on ne peut pas le reconstruire fiablement
-    const ident = geoInfo.siren ? geoInfo.siren + '00018' : null;
+    // SIRET commune = siren (9 chiffres, fourni par geo API) + "00018" (siège principal)
+    // Sans siren on ne peut pas reconstruire l'identifiant fiablement
+    const siren = geoInfo.siren && /^\d+$/.test(geoInfo.siren) ? geoInfo.siren : null;
+    const ident = siren ? siren + '00018' : null;
 
     const [balances, marches, subventions] = await Promise.all([
       fetchBalances(ident, nomCommune),
-      fetchMarches(ident, nomCommune),
+      fetchMarches(ident),
       fetchSubventions(nomCommune),
     ]);
 
     // ── 3. Agrégation ───────────────────────────────────
     const result = aggregate(insee, geoInfo, balances, marches, subventions);
 
-    // ── 4. Stockage cache (upsert) — seulement si on a des données réelles ──
-    // Ne pas cacher un résultat vide : la prochaine requête retenterait les APIs
+    // ── 4. Stockage cache — uniquement si données réelles ──
+    // Un budget_total=0 indique des données indisponibles : ne pas cacher
+    // pour que la prochaine requête retente les APIs.
     if (result.budget_total > 0) {
       await sb.from('cache_communes').upsert({
         insee,
@@ -85,12 +103,12 @@ module.exports = async (req, res) => {
         cached_at: new Date().toISOString(),
       });
     } else {
-      console.warn(`commune ${insee}: budget_total=0, résultat non mis en cache`);
+      console.warn(`[commune] ${insee} (${nomCommune}): budget_total=0 — données indisponibles pour ${DATA_YEAR}, non mis en cache`);
     }
 
     return res.status(200).json(result);
   } catch (err) {
-    console.error('commune API error:', err);
+    console.error('[commune] erreur:', err.message);
     return res.status(500).json({ error: err.message });
   }
 };
@@ -106,16 +124,16 @@ async function fetchGeo(insee) {
 }
 
 async function fetchBalances(ident, nomCommune) {
-  // Filtre prioritaire par ident (SIRET 14 chiffres) — plus robuste que le nom
-  // Si le SIRET est connu mais renvoie 0 résultats (ex: différence de format dans le dataset),
-  // on retente automatiquement par lbudg (nom en majuscules)
+  // Filtre prioritaire par ident (SIRET 14 chiffres) — évite les ambiguïtés de nom.
+  // Retry automatique par lbudg si le SIRET est connu mais renvoie 0 résultats
+  // (format légèrement différent selon les millésimes du dataset DGFIP).
   if (ident) {
-    const byIdent = await fetchBalancesWhere(`ident = "${ident}" AND cbudg = "1"`);
+    const byIdent = await fetchBalancesWhere(`ident = "${odsEsc(ident)}" AND cbudg = "1"`);
     if (byIdent.length > 0) return byIdent;
-    console.warn(`fetchBalances: 0 résultats pour ident="${ident}", retry par lbudg`);
+    console.warn(`[commune] fetchBalances: 0 résultats pour ident=${ident}, retry par lbudg`);
   }
   if (!nomCommune) return [];
-  return fetchBalancesWhere(`lbudg = "${nomCommune.toUpperCase()}" AND cbudg = "1"`);
+  return fetchBalancesWhere(`lbudg = "${odsEsc(nomCommune.toUpperCase())}" AND cbudg = "1"`);
 }
 
 async function fetchBalancesWhere(where) {
@@ -126,11 +144,11 @@ async function fetchBalancesWhere(where) {
   return json.results || [];
 }
 
-async function fetchMarches(ident, nomCommune) {
+async function fetchMarches(ident) {
   // DECP: acheteur_id = SIRET commune — sans ident on ne peut pas filtrer fiablement
   if (!ident) return [];
   const params = new URLSearchParams({
-    where: `acheteur_id = "${ident}"`,
+    where: `acheteur_id = "${odsEsc(ident)}"`,
     select: 'id, objet, montant, datepublicationdonnees, procedure, titulaire_denominationsociale',
     order_by: 'datepublicationdonnees DESC',
     limit: '50',
@@ -142,10 +160,11 @@ async function fetchMarches(ident, nomCommune) {
 }
 
 async function fetchSubventions(nomCommune) {
-  // Subventions: dataset peut ne pas exister ou être indisponible
+  // Dataset subventions optionnel — peut être indisponible selon la commune
+  if (!nomCommune) return [];
   try {
     const params = new URLSearchParams({
-      where: `nom_attribuant LIKE "${nomCommune.toUpperCase()}"`,
+      where: `nom_attribuant LIKE "${odsEscLike(nomCommune.toUpperCase())}"`,
       select: 'nom_beneficiaire, objet, montant, date_convention',
       order_by: 'date_convention DESC',
       limit: '50',
@@ -171,7 +190,6 @@ function aggregate(insee, geo, balances, marches, subventions) {
 
   for (const row of balances) {
     const compte = String(row.compte || '');
-    // Déterminer le chapitre (2 ou 3 premiers chiffres selon la nomenclature M14)
     let chap = null;
     for (const prefix of ['011', '012', '014', '042', '65', '66', '67', '20', '21', '23', '16']) {
       if (compte.startsWith(prefix)) { chap = prefix; break; }
@@ -179,6 +197,7 @@ function aggregate(insee, geo, balances, marches, subventions) {
     if (!chap) continue;
 
     const depense = Math.abs(Number(row.sd || row.total_sd || 0));
+    if (!Number.isFinite(depense) || depense === 0) continue;
     if (!chapitres[chap]) {
       chapitres[chap] = { lib: CHAPITRES_LIB[chap] || `Chapitre ${chap}`, depense: 0 };
     }
@@ -187,22 +206,30 @@ function aggregate(insee, geo, balances, marches, subventions) {
   }
 
   // ── Marchés publics ───────────────────────────────────
-  const marchesClean = marches.map(m => ({
-    ref: m.id || '',
-    objet: m.objet || '',
-    attributaire: m.titulaire_denominationsociale || '',
-    montant: Number(m.montant) || 0,
-    date: m.datepublicationdonnees || '',
-    procedure: m.procedure || '',
-  }));
+  const marchesClean = marches
+    .map(m => ({
+      ref:          m.id || '',
+      objet:        m.objet || '',
+      attributaire: m.titulaire_denominationsociale || '',
+      montant:      Number(m.montant) || 0,
+      date:         m.datepublicationdonnees || '',
+      procedure:    m.procedure || '',
+    }))
+    .filter(m => m.montant > 0);
 
   // ── Subventions ───────────────────────────────────────
-  const subvClean = subventions.map(s => ({
-    beneficiaire: s.nom_beneficiaire || '',
-    objet: s.objet || '',
-    montant: Number(s.montant) || 0,
-    annee: s.date_convention ? new Date(s.date_convention).getFullYear() : null,
-  }));
+  const subvClean = subventions
+    .map(s => {
+      const dateConv = s.date_convention ? new Date(s.date_convention) : null;
+      const annee = dateConv && !isNaN(dateConv) ? dateConv.getFullYear() : null;
+      return {
+        beneficiaire: s.nom_beneficiaire || '',
+        objet:        s.objet || '',
+        montant:      Number(s.montant) || 0,
+        annee,
+      };
+    })
+    .filter(s => s.montant > 0);
 
   // ── KPIs ──────────────────────────────────────────────
   const depPersonnel = (chapitres['012'] || {}).depense || 0;
@@ -210,9 +237,9 @@ function aggregate(insee, geo, balances, marches, subventions) {
   const dette = (chapitres['16'] || {}).depense || 0;
 
   const kpis = {
-    budget_par_habitant: population ? Math.round(budgetTotal / population) : 0,
-    ratio_personnel: budgetTotal ? +((depPersonnel / budgetTotal) * 100).toFixed(1) : 0,
-    dette_par_habitant: population ? Math.round(dette / population) : 0,
+    budget_par_habitant:  population ? Math.round(budgetTotal / population) : 0,
+    ratio_personnel:      budgetTotal ? +((depPersonnel / budgetTotal) * 100).toFixed(1) : 0,
+    dette_par_habitant:   population ? Math.round(dette / population) : 0,
     ratio_investissement: budgetTotal ? +((depInvest / budgetTotal) * 100).toFixed(1) : 0,
     population,
   };
@@ -230,22 +257,19 @@ function aggregate(insee, geo, balances, marches, subventions) {
     anomalies.push({ type: 'dette_elevee', valeur: kpis.dette_par_habitant, seuil: 1500, severite: 'warning' });
   }
 
-  // 3. Investissement faible (< 10 % du budget, seulement si budget > 500k pour éviter le bruit)
+  // 3. Investissement faible (< 10 % du budget, uniquement si budget > 500k)
   if (budgetTotal > 500000 && kpis.ratio_investissement < 10 && kpis.ratio_investissement > 0) {
     anomalies.push({ type: 'investissement_faible', valeur: kpis.ratio_investissement, seuil: 10, severite: 'warning' });
   }
 
-  // 4. Marchés MAPA au-dessus du seuil légal pour les collectivités (214 000 € HT en 2023)
-  const SEUIL_AO_COLLECTIVITES = 214000;
+  // 4. Marchés MAPA au-dessus du seuil légal (214 000 € HT pour les collectivités)
+  const SEUIL_AO = 214000;
   for (const m of marchesClean) {
-    if (m.procedure && /adapt[eé]/i.test(m.procedure) && m.montant > SEUIL_AO_COLLECTIVITES) {
+    if (m.procedure && /adapt[eé]/i.test(m.procedure) && m.montant > SEUIL_AO) {
       anomalies.push({
         type: 'marche_mapa_seuil',
-        valeur: m.montant,
-        seuil: SEUIL_AO_COLLECTIVITES,
-        ref: m.ref,
-        objet: m.objet,
-        attributaire: m.attributaire,
+        valeur: m.montant, seuil: SEUIL_AO,
+        ref: m.ref, objet: m.objet, attributaire: m.attributaire,
         severite: 'error',
       });
     }
@@ -255,7 +279,7 @@ function aggregate(insee, geo, balances, marches, subventions) {
   const marcheCount = {};
   for (const m of marchesClean) {
     const key = m.attributaire.toLowerCase();
-    if (key) { marcheCount[key] = (marcheCount[key] || 0) + 1; }
+    if (key) marcheCount[key] = (marcheCount[key] || 0) + 1;
   }
   for (const [attr, count] of Object.entries(marcheCount)) {
     if (count > 3) {
@@ -266,14 +290,14 @@ function aggregate(insee, geo, balances, marches, subventions) {
   return {
     insee,
     nom,
-    annee: 2023,
+    annee: DATA_YEAR,
     budget_total: budgetTotal,
     chapitres,
     marches: marchesClean,
     subventions: subvClean,
     kpis,
     anomalies_auto: anomalies,
-    source: 'DGFIP · data.economie.gouv.fr',
+    source: `DGFIP ${DATA_YEAR} · data.economie.gouv.fr`,
     cached_at: new Date().toISOString(),
   };
 }

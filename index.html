@@ -597,7 +597,38 @@ canvas#pie{
 .ai-btn:hover{background:var(--mid);color:var(--text);}
 .ai-btn.d{border-color:rgba(255,107,107,.3);color:#ff9090;}
 
-/* Dots loader */
+/* KPI chips — bande d'indicateurs clés au niveau racine */
+.kcard{
+  flex-shrink:0;
+  width:clamp(105px,28vw,135px);
+  background:rgba(91,156,246,0.07);
+  border:1px solid rgba(91,156,246,0.2);
+  border-radius:18px;padding:12px 12px 10px;
+  scroll-snap-align:start;
+  backdrop-filter:blur(20px) saturate(160%);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);
+}
+.kcard-label{font-size:.57rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sky);opacity:.75;margin-bottom:5px;}
+.kcard-value{font-family:'Fraunces',serif;font-size:1.15rem;font-weight:600;font-style:italic;color:var(--text);line-height:1;}
+.kcard-value.warn{color:var(--ember);}
+.kcard-unit{font-family:'DM Mono',monospace;font-size:.52rem;color:var(--soft);margin-top:3px;}
+
+/* Bandeau mode démo */
+.demo-pill{
+  position:fixed;
+  bottom:calc(env(safe-area-inset-bottom,0px) + 96px);
+  left:50%;transform:translateX(-50%);
+  background:rgba(240,180,41,0.1);
+  border:1px solid rgba(240,180,41,0.3);
+  border-radius:20px;padding:5px 14px;
+  font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gold);z-index:40;
+  display:none;pointer-events:none;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.demo-pill.vis{display:block;}
+
+
 .dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--gold);margin-right:3px;animation:db 1.2s ease-in-out infinite;}
 .dots span:nth-child(2){animation-delay:.2s;}.dots span:nth-child(3){animation-delay:.4s;}
 @keyframes db{0%,80%,100%{transform:scale(.55);opacity:.25;}40%{transform:scale(1);opacity:1;}}
@@ -729,6 +760,7 @@ canvas#pie{
   <div class="drw-body" id="drw-body"></div>
 </div>
 
+<div class="demo-pill" id="demo-pill">⚠ Données de démo</div>
 <div id="toast"></div>
 
 <script>
@@ -1007,7 +1039,8 @@ function render(anim=true){
   if(currentCity){
     document.getElementById('dc-city').textContent = currentCity.nom;
     document.getElementById('dc-amount').innerHTML = `<strong>${fmt(total||node.value)}</strong>`;
-    document.getElementById('dc-sub').textContent = depth===0?'budget total':'sous-total';
+    const anneeLabel = ROOT.annee ? ` · ${ROOT.annee}` : '';
+    document.getElementById('dc-sub').textContent = depth===0?`budget total${anneeLabel}`:'sous-total';
   }
 
   // Back
@@ -1141,6 +1174,27 @@ function buildCards(items,total){
   scroll.innerHTML='';
   if(!items.length)return;
 
+  // Chips KPI — visibles uniquement à la racine avec des données réelles
+  const depth=nav.length-1;
+  if(depth===0&&ROOT.kpis&&ROOT.budget_total>0){
+    const k=ROOT.kpis;
+    const chips=[
+      {label:'Budget/hab.',  val:k.budget_par_habitant,  unit:'€ / habitant', warn:false},
+      {label:'Personnel',    val:k.ratio_personnel,      unit:'% du budget',  warn:k.ratio_personnel>35},
+      {label:'Investissement',val:k.ratio_investissement,unit:'% du budget',  warn:k.ratio_investissement<10&&k.ratio_investissement>0},
+      {label:'Dette/hab.',   val:k.dette_par_habitant,   unit:'€ / habitant', warn:k.dette_par_habitant>1500},
+    ].filter(c=>c.val>0);
+    chips.forEach(c=>{
+      const el=document.createElement('div');
+      el.className='kcard';
+      const display=c.unit.includes('€')?fmt(c.val):c.val+'%';
+      el.innerHTML=`<div class="kcard-label">${c.label}</div>
+        <div class="kcard-value${c.warn?' warn':''}">${display}</div>
+        <div class="kcard-unit">${c.unit}</div>`;
+      scroll.appendChild(el);
+    });
+  }
+
   items.forEach((item,i)=>{
     const pct=((item.value/total)*100).toFixed(1);
     const color=item.color||COLORS[i%COLORS.length];
@@ -1233,9 +1287,10 @@ function goBack(){
 }
 
 function onLogoTap(){
-  // Scroll cards back to start
   document.getElementById('items-scroll').scrollTo({left:0,behavior:'smooth'});
   if(nav.length>1){nav=[ROOT];hiIdx=-1;closeDrawer();render(true);}
+  // Reset démo pill si on recharge
+  if(!currentCity) document.getElementById('demo-pill').classList.remove('vis');
 }
 
 // ═══════════════════════════════════════════
@@ -1317,12 +1372,21 @@ async function searchGeo(q){
 }
 
 function soItemHTML(c,i,emo,q=''){
-  const name=q?c.nom.replace(new RegExp(q,'gi'),m=>`<mark>${m}</mark>`):c.nom;
+  // Échappe les caractères spéciaux RegExp pour éviter le XSS via $& etc.
+  // Puis split/escape/wrap pour un highlight sûr sans injection HTML
+  let name;
+  if(q){
+    const safeQ=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const parts=c.nom.split(new RegExp(`(${safeQ})`,'gi'));
+    name=parts.map((p,idx)=>idx%2===1?`<mark>${esc(p)}</mark>`:esc(p)).join('');
+  }else{
+    name=esc(c.nom);
+  }
   return`<div class="so-item" data-idx="${i}">
     <div class="si-icon">${emo}</div>
     <div class="si-body">
       <div class="si-name">${name}</div>
-      <div class="si-sub">${c.dept||''} ${c.deptNum?'('+c.deptNum+')':''} · ${c.cp}</div>
+      <div class="si-sub">${esc(c.dept||'')} ${c.deptNum?'('+esc(c.deptNum)+')':''} · ${esc(c.cp)}</div>
     </div>
     <div class="si-pop">${fmtPop(c.pop)}</div>
     <div class="si-arr">›</div>
@@ -1348,35 +1412,38 @@ function pickCity(city){
 //  BUILD TREE FROM API RESPONSE
 // ═══════════════════════════════════════════
 function buildTreeFromAPI(d){
+  if(!d||typeof d!=='object') return makeRoot('Commune');
   const C=COLORS;
   const chapEntries=Object.entries(d.chapitres||{});
-  const chapChildren=chapEntries.map(([code,ch],i)=>({
-    label:ch.lib||`Chapitre ${code}`,
-    value:ch.depense||0,
-    color:C[i%C.length],
-    leaf:true,
-    ltype:'inv',
-    data:{m:`CHAP-${code}`,a:'DGFIP',p:'Comptabilité M14',inv:[]},
-  }));
+  const chapChildren=chapEntries
+    .filter(([,ch])=>Number(ch.depense)>0)
+    .map(([code,ch],i)=>({
+      label:ch.lib||`Chapitre ${code}`,
+      value:Number(ch.depense)||0,
+      color:C[i%C.length],
+      leaf:true,
+      ltype:'inv',
+      data:{m:`CHAP-${code}`,a:'DGFIP',p:'Comptabilité M14',inv:[]},
+    }));
 
-  const marchesChildren=(d.marches||[]).filter(m=>m.montant>0).map((m,i)=>({
+  const marchesChildren=(d.marches||[]).filter(m=>Number(m.montant)>0).map((m,i)=>({
     label:m.objet||m.ref||'Marché',
-    value:m.montant,
+    value:Number(m.montant),
     color:C[(i+2)%C.length],
     leaf:true,
     ltype:'inv',
     data:{m:m.ref,a:m.attributaire,p:m.procedure,inv:[
-      {n:m.ref,d:m.objet,s:m.attributaire,v:m.montant,dt:m.date,f:'ok'},
+      {n:m.ref,d:m.objet,s:m.attributaire,v:Number(m.montant),dt:m.date,f:'ok'},
     ]},
   }));
 
-  const subvChildren=(d.subventions||[]).filter(s=>s.montant>0).map((s,i)=>({
+  const subvChildren=(d.subventions||[]).filter(s=>Number(s.montant)>0).map((s,i)=>({
     label:s.beneficiaire||'Association',
-    value:s.montant,
+    value:Number(s.montant),
     color:C[(i+4)%C.length],
     leaf:true,
     ltype:'pers',
-    data:{role:s.beneficiaire,grade:s.objet||'',brut:fmtEur(s.montant),net:'',base:`Convention ${s.annee||''}`,note:''},
+    data:{role:s.beneficiaire,grade:s.objet||'',brut:fmtEur(Number(s.montant)),net:'',base:s.annee?`Convention ${s.annee}`:'',note:''},
   }));
 
   const children=[];
@@ -1384,26 +1451,36 @@ function buildTreeFromAPI(d){
   if(marchesChildren.length) children.push({label:'Marchés publics',value:marchesChildren.reduce((a,c)=>a+c.value,0),color:C[3],children:marchesChildren});
   if(subvChildren.length) children.push({label:'Subventions',value:subvChildren.reduce((a,c)=>a+c.value,0),color:C[4],children:subvChildren});
 
-  // Anomalies → inject into relevant nodes
+  // Anomalies → injecter dans les nœuds concernés pour colorer le camembert
   const anomalies=d.anomalies_auto||[];
   for(const an of anomalies){
     if(an.type==='ratio_personnel_eleve'){
-      const ch012=chapChildren.find(c=>c.label.includes('personnel'));
-      if(ch012) ch012.anomaly=`⚠ Ratio ${an.valeur}% > seuil ${an.seuil}%`;
+      const node=chapChildren.find(c=>c.label.toLowerCase().includes('personnel'));
+      if(node) node.anomaly=`⚠ Ratio ${an.valeur}% > seuil ${an.seuil}%`;
     }
     if(an.type==='marche_reconduit'){
-      const mc=marchesChildren.find(c=>c.data?.a?.toLowerCase()===an.attributaire);
-      if(mc) mc.anomaly=`⚠ Reconduit ${an.nombre} fois`;
+      const node=marchesChildren.find(c=>c.data?.a?.toLowerCase()===an.attributaire);
+      if(node) node.anomaly=`⚠ Reconduit ${an.nombre} fois`;
+    }
+    if(an.type==='marche_mapa_seuil'){
+      const node=marchesChildren.find(c=>c.data?.m===an.ref);
+      if(node) node.anomaly=`🚨 MAPA > seuil légal`;
+    }
+    if(an.type==='investissement_faible'){
+      const node=chapChildren.find(c=>['20','21','23'].some(p=>c.data?.m?.includes(p)));
+      if(node) node.anomaly=`⚠ Investissement ${an.valeur}% < ${an.seuil}%`;
     }
   }
 
   return{
-    label:`Budget ${d.nom} ${d.annee||2023}`,
+    label:`Budget ${d.nom} ${d.annee||''}`.trim(),
     value:d.budget_total||children.reduce((a,c)=>a+c.value,0),
     cityName:d.nom,
+    annee:d.annee,
     children,
     kpis:d.kpis,
     anomalies_auto:anomalies,
+    source:d.source||'',
   };
 }
 
@@ -1430,9 +1507,12 @@ async function loadCityData(city){
   loTxt.classList.remove('lo-err');
   lo.classList.add('on');
 
+  const demoPill=document.getElementById('demo-pill');
+  demoPill.classList.remove('vis');
+
   try{
     const res=await fetch(`/api/commune?insee=${city.code}`);
-    if(!res.ok) throw new Error(`Erreur ${res.status}`);
+    if(!res.ok) throw new Error(`Erreur serveur ${res.status}`);
     const data=await res.json();
     if(data.error) throw new Error(data.error);
 
@@ -1445,11 +1525,17 @@ async function loadCityData(city){
 
     lo.classList.remove('on');
     render(true);
-    showToast(`📊 Données DGFIP ${data.annee||2023} · ${city.nom}`);
+
+    if(!data.budget_total||data.budget_total===0){
+      // L'API a répondu mais sans données budgétaires pour cette commune
+      showToast(`⚠ Aucune donnée DGFIP disponible pour ${city.nom}`);
+    }else{
+      showToast(`📊 Données ${data.source||('DGFIP '+(data.annee||''))} · ${city.nom}`);
+    }
   }catch(err){
-    console.error('loadCityData error:', err);
-    // Fallback: données fictives avec anomalies structurées
-    loTxt.innerHTML=`<span class="lo-err">⚠ ${err.message}<br>Chargement des données de démo…</span>`;
+    console.error('[loadCityData]', err.message);
+    // L'API est inaccessible ou en erreur → mode démo avec indication claire
+    loTxt.innerHTML=`<span class="lo-err">⚠ ${esc(err.message)}<br>Chargement des données de démo…</span>`;
     setTimeout(()=>{
       ROOT=makeRoot(city.nom);
       ROOT.anomalies_auto=DEMO_ANOMALIES_AUTO;
@@ -1457,9 +1543,10 @@ async function loadCityData(city){
       const n=DEMO_ANOMALIES_AUTO.length;
       document.getElementById('alert-badge').style.display='flex';
       document.getElementById('alert-num').textContent=String(n);
+      demoPill.classList.add('vis');
       lo.classList.remove('on');
       render(true);
-      showToast(`📊 Données de démo · ${city.nom}`);
+      showToast(`⚠ Mode démo · données fictives`);
     },1500);
   }
 }
@@ -1760,30 +1847,41 @@ async function runAI(node,el){
   const anomaly=node.anomaly||node.data?.anomaly||'';
   const invs=(node.data?.inv||[]).map(i=>`${i.d}: ${fmt(i.v)}${i.note?' ['+i.note+']':''}`).join('\n');
   const pers=(node.persons||[]).map(p=>`${p.name}: ${p.brut}`).join('\n');
+  // Sanitize city/node names : supprimer les sauts de ligne pour éviter les prompt injections
+  const cityName=(currentCity?.nom||'Commune').replace(/[\r\n]/g,' ');
+  const posteName=(node.label||'').replace(/[\r\n]/g,' ');
+  const annee=ROOT.annee||new Date().getFullYear()-2;
   const prompt=`Expert finances publiques françaises. Analyse ce poste pour un citoyen.
-Commune: ${currentCity?.nom||'Cambrai'} · Budget 2022
-Poste: ${node.label} — ${fmt(node.value)}
+Commune: ${cityName} · Budget ${annee}
+Poste: ${posteName} — ${fmt(node.value)}
 Anomalie: ${anomaly||'aucune'}
 ${invs?'Factures:\n'+invs:''}${pers?'\nPersonnel:\n'+pers:''}
-Réponds en 3 blocs courts:
+Réponds uniquement en 3 blocs courts, sans autre texte :
 Verdict: [normal ou suspect ?]
-Point d'attention: [risque principal ou rien si tout va bien]
-Question CM: [question précise à poser en séance]`;
+Point d'attention: [risque principal, ou "aucun" si budget sain]
+Question CM: [question précise et concrète à poser en séance]`;
 
   try{
     const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+    if(!r.ok) throw new Error(`Erreur ${r.status}`);
     const d=await r.json();
+    if(d.error) throw new Error(d.error);
     const txt=d.text||'';
+    // Parsing robuste : détecte les sections par mots-clés en début de ligne
+    // (avec ou sans majuscules, avec ou sans tiret/deux-points)
     el.innerHTML=txt.split('\n').filter(l=>l.trim()).map(l=>{
-      const c=l.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-      if(l.toLowerCase().startsWith('verdict'))return`<div class="ai-v">${c}</div>`;
-      if(l.toLowerCase().startsWith('point'))return`<div class="ai-w">${c}</div>`;
-      if(l.toLowerCase().startsWith('question'))return`<div class="ai-q">${c}</div>`;
-      return`<p style="margin:5px 0;font-size:.8rem;color:var(--soft)">${c}</p>`;
+      const safe=esc(l).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+      const low=l.toLowerCase();
+      if(/^(verdict|#+ *verdict)/.test(low)) return`<div class="ai-v">${safe}</div>`;
+      if(/^(point|#+ *point)/.test(low))    return`<div class="ai-w">${safe}</div>`;
+      if(/^(question|#+ *question)/.test(low)) return`<div class="ai-q">${safe}</div>`;
+      return`<p style="margin:5px 0;font-size:.8rem;color:var(--soft)">${safe}</p>`;
     }).join('');
-  }catch{
-    el.innerHTML=`<div class="ai-v">Verdict : ${anomaly?'Ce poste présente une anomalie à investiguer.':'Montant cohérent pour une commune de cette taille.'}</div>
-    ${anomaly?`<div class="ai-w">Point d'attention : ${anomaly}</div>`:''}
+    if(!el.innerHTML.trim()) throw new Error('réponse vide');
+  }catch(e){
+    console.warn('[runAI] fallback:', e.message);
+    el.innerHTML=`<div class="ai-v">Verdict : ${esc(anomaly?'Ce poste présente une anomalie à investiguer.':'Montant cohérent avec la taille de la commune.')}</div>
+    ${anomaly?`<div class="ai-w">Point d'attention : ${esc(anomaly)}</div>`:''}
     <div class="ai-q">Question CM : Demandez les pièces justificatives complètes pour ce poste.</div>`;
   }
 }
