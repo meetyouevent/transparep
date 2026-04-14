@@ -59,18 +59,30 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const sb = createClient(SB_URL, SB_KEY);
+    // ── 0. Supabase optionnel (pas d'erreur si env vars absentes) ──
+    let sb = null;
+    if (SB_URL && SB_KEY) {
+      try {
+        sb = createClient(SB_URL, SB_KEY);
+      } catch (e) {
+        console.warn('[commune] Supabase non disponible:', e.message);
+      }
+    } else {
+      console.warn('[commune] SUPABASE_URL/KEY non configurées — cache désactivé');
+    }
 
     // ── 1. Cache hit ? ──────────────────────────────────
-    const { data: cached } = await sb
-      .from('cache_communes')
-      .select('data, cached_at')
-      .eq('insee', insee)
-      .single();
+    if (sb) {
+      const { data: cached } = await sb
+        .from('cache_communes')
+        .select('data, cached_at')
+        .eq('insee', insee)
+        .single();
 
-    const cachedBudget = cached?.data?.budget_total ?? 0;
-    if (cached && cachedBudget > 0 && (Date.now() - new Date(cached.cached_at).getTime()) < TTL_MS) {
-      return res.status(200).json(cached.data);
+      const cachedBudget = cached?.data?.budget_total ?? 0;
+      if (cached && cachedBudget > 0 && (Date.now() - new Date(cached.cached_at).getTime()) < TTL_MS) {
+        return res.status(200).json(cached.data);
+      }
     }
 
     // ── 2. Cache miss → fetch geo ───────────────────────
@@ -101,15 +113,17 @@ module.exports = async (req, res) => {
     const result = aggregate(insee, geoInfo, balances, marches, subventions, effectiveYear);
 
     // ── 5. Stockage cache ───────────────────────────────
-    if (result.budget_total > 0) {
-      await sb.from('cache_communes').upsert({
-        insee,
-        nom: result.nom,
-        data: result,
-        cached_at: new Date().toISOString(),
-      });
-    } else {
-      console.warn(`[commune] ${insee} (${nomCommune}): budget_total=0 — aucune donnée trouvée de ${START_YEAR} à ${START_YEAR - MAX_YEAR_FALLBACK}`);
+    if (sb) {
+      if (result.budget_total > 0) {
+        await sb.from('cache_communes').upsert({
+          insee,
+          nom: result.nom,
+          data: result,
+          cached_at: new Date().toISOString(),
+        });
+      } else {
+        console.warn(`[commune] ${insee} (${nomCommune}): budget_total=0 — aucune donnée trouvée de ${START_YEAR} à ${START_YEAR - MAX_YEAR_FALLBACK}`);
+      }
     }
 
     return res.status(200).json(result);
