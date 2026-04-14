@@ -13,16 +13,18 @@ const CORS = {
 
 const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
-// ─── Année des données (configurable via env) ────────────
+// ─── Année de départ (configurable via env) ──────────────
 // Les données DGFIP sont publiées avec ~18-24 mois de décalage.
-// DGFIP_YEAR=2024 npm run dev pour forcer une année spécifique.
-const DATA_YEAR = parseInt(process.env.DGFIP_YEAR || '') || (new Date().getFullYear() - 2);
+// Si le dataset de l'année cible est vide, on recule automatiquement
+// jusqu'à 3 ans en arrière (MAX_YEAR_FALLBACK).
+const START_YEAR = parseInt(process.env.DGFIP_YEAR || '') || (new Date().getFullYear() - 2);
+const MAX_YEAR_FALLBACK = 3; // essaie jusqu'à START_YEAR - 3
 
-// ─── APIs publiques ─────────────────────────────────────
-const DGFIP_URL = `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/balances-comptables-des-communes-en-${DATA_YEAR}/records`;
-const DECP_URL  = `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-${DATA_YEAR}-marches-valides/records`;
-const SUBV_URL  = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/dispositif-de-subventions-aux-associations/records';
-const GEO_URL   = 'https://geo.api.gouv.fr/communes';
+// ─── URLs dynamiques par année ───────────────────────────
+const dgfipUrl = y => `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/balances-comptables-des-communes-en-${y}/records`;
+const decpUrl  = y => `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/decp-${y}-marches-valides/records`;
+const SUBV_URL = 'https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/dispositif-de-subventions-aux-associations/records';
+const GEO_URL  = 'https://geo.api.gouv.fr/communes';
 
 // ─── Chapitres comptables M14 ───────────────────────────
 const CHAPITRES_LIB = {
@@ -40,12 +42,9 @@ const CHAPITRES_LIB = {
 };
 
 // ─── Sanitization ODS WHERE ──────────────────────────────
-// Échappe les guillemets et backslashes dans les valeurs des clauses WHERE ODS API v2.1.
-// Évite les injections via des noms de communes contenant " ou \ (ex: Villiers-l'Évêque).
 function odsEsc(s) {
   return String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
-// Même chose + échappement des wildcards LIKE (%, _)
 function odsEscLike(s) {
   return odsEsc(s).replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
@@ -74,27 +73,34 @@ module.exports = async (req, res) => {
       return res.status(200).json(cached.data);
     }
 
-    // ── 2. Cache miss → fetch geo d'abord ──────────────
+    // ── 2. Cache miss → fetch geo ───────────────────────
     const geoInfo = await fetchGeo(insee);
     const nomCommune = geoInfo.nom || '';
 
-    // SIRET commune = siren (9 chiffres, fourni par geo API) + "00018" (siège principal)
-    // Sans siren on ne peut pas reconstruire l'identifiant fiablement
     const siren = geoInfo.siren && /^\d+$/.test(geoInfo.siren) ? geoInfo.siren : null;
     const ident = siren ? siren + '00018' : null;
 
-    const [balances, marches, subventions] = await Promise.all([
-      fetchBalances(ident, nomCommune),
-      fetchMarches(ident),
+    // ── 3. Fetch balances avec fallback annuel ──────────
+    // Tente START_YEAR, recule d'un an si 0 résultats (dataset pas encore publié)
+    let balances = [];
+    let effectiveYear = START_YEAR;
+
+    for (let y = START_YEAR; y >= START_YEAR - MAX_YEAR_FALLBACK; y--) {
+      balances = await fetchBalances(y, ident, nomCommune);
+      if (balances.length > 0) { effectiveYear = y; break; }
+      console.warn(`[commune] ${insee}: 0 résultats DGFIP ${y} — essai ${y - 1}`);
+    }
+
+    // Marchés et subventions avec l'année effective trouvée
+    const [marches, subventions] = await Promise.all([
+      fetchMarches(effectiveYear, ident),
       fetchSubventions(nomCommune),
     ]);
 
-    // ── 3. Agrégation ───────────────────────────────────
-    const result = aggregate(insee, geoInfo, balances, marches, subventions);
+    // ── 4. Agrégation ───────────────────────────────────
+    const result = aggregate(insee, geoInfo, balances, marches, subventions, effectiveYear);
 
-    // ── 4. Stockage cache — uniquement si données réelles ──
-    // Un budget_total=0 indique des données indisponibles : ne pas cacher
-    // pour que la prochaine requête retente les APIs.
+    // ── 5. Stockage cache ───────────────────────────────
     if (result.budget_total > 0) {
       await sb.from('cache_communes').upsert({
         insee,
@@ -103,7 +109,7 @@ module.exports = async (req, res) => {
         cached_at: new Date().toISOString(),
       });
     } else {
-      console.warn(`[commune] ${insee} (${nomCommune}): budget_total=0 — données indisponibles pour ${DATA_YEAR}, non mis en cache`);
+      console.warn(`[commune] ${insee} (${nomCommune}): budget_total=0 — aucune donnée trouvée de ${START_YEAR} à ${START_YEAR - MAX_YEAR_FALLBACK}`);
     }
 
     return res.status(200).json(result);
@@ -117,8 +123,6 @@ module.exports = async (req, res) => {
 //  FETCH HELPERS
 // ═════════════════════════════════════════════════════════
 
-// ─── Fetch avec timeout ──────────────────────────────────
-// Évite de bloquer la serverless function 30s sur un timeout silencieux
 async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -136,31 +140,27 @@ async function fetchGeo(insee) {
   return r.json();
 }
 
-async function fetchBalances(ident, nomCommune) {
-  // Filtre prioritaire par ident (SIRET 14 chiffres) — évite les ambiguïtés de nom.
-  // Retry automatique par lbudg si le SIRET est connu mais renvoie 0 résultats
-  // (format légèrement différent selon les millésimes du dataset DGFIP).
+async function fetchBalances(year, ident, nomCommune) {
   if (ident) {
-    const byIdent = await fetchBalancesWhere(`ident = "${odsEsc(ident)}" AND cbudg = "1"`);
+    const byIdent = await fetchBalancesWhere(year, `ident = "${odsEsc(ident)}" AND cbudg = "1"`);
     if (byIdent.length > 0) return byIdent;
-    console.warn(`[commune] fetchBalances: 0 résultats pour ident=${ident}, retry par lbudg`);
+    console.warn(`[commune] fetchBalances ${year}: 0 résultats pour ident=${ident}, retry par lbudg`);
   }
   if (!nomCommune) return [];
-  return fetchBalancesWhere(`lbudg = "${odsEsc(nomCommune.toUpperCase())}" AND cbudg = "1"`);
+  return fetchBalancesWhere(year, `lbudg = "${odsEsc(nomCommune.toUpperCase())}" AND cbudg = "1"`);
 }
 
-async function fetchBalancesWhere(where) {
+async function fetchBalancesWhere(year, where) {
   const params = new URLSearchParams({ where, select: 'compte, sd, sc', limit: '200' });
   try {
-    const r = await fetchWithTimeout(`${DGFIP_URL}?${params}`);
+    const r = await fetchWithTimeout(`${dgfipUrl(year)}?${params}`);
     if (!r.ok) return [];
     const json = await r.json();
     return json.results || [];
   } catch { return []; }
 }
 
-async function fetchMarches(ident) {
-  // DECP: acheteur_id = SIRET commune — sans ident on ne peut pas filtrer fiablement
+async function fetchMarches(year, ident) {
   if (!ident) return [];
   const params = new URLSearchParams({
     where: `acheteur_id = "${odsEsc(ident)}"`,
@@ -169,7 +169,7 @@ async function fetchMarches(ident) {
     limit: '50',
   });
   try {
-    const r = await fetchWithTimeout(`${DECP_URL}?${params}`);
+    const r = await fetchWithTimeout(`${decpUrl(year)}?${params}`);
     if (!r.ok) return [];
     const json = await r.json();
     return json.results || [];
@@ -177,7 +177,6 @@ async function fetchMarches(ident) {
 }
 
 async function fetchSubventions(nomCommune) {
-  // Dataset subventions optionnel — peut être indisponible selon la commune
   if (!nomCommune) return [];
   try {
     const params = new URLSearchParams({
@@ -197,7 +196,7 @@ async function fetchSubventions(nomCommune) {
 //  AGRÉGATION → structure arbre frontend
 // ═════════════════════════════════════════════════════════
 
-function aggregate(insee, geo, balances, marches, subventions) {
+function aggregate(insee, geo, balances, marches, subventions, effectiveYear) {
   const nom = geo.nom || insee;
   const population = geo.population || 0;
 
@@ -264,22 +263,16 @@ function aggregate(insee, geo, balances, marches, subventions) {
   // ── Anomalies automatiques ────────────────────────────
   const anomalies = [];
 
-  // 1. Ratio de personnel élevé (> 35 %)
   if (kpis.ratio_personnel > 35) {
     anomalies.push({ type: 'ratio_personnel_eleve', valeur: kpis.ratio_personnel, seuil: 35, severite: 'warning' });
   }
-
-  // 2. Endettement élevé (> 1 500 €/habitant)
   if (population > 0 && kpis.dette_par_habitant > 1500) {
     anomalies.push({ type: 'dette_elevee', valeur: kpis.dette_par_habitant, seuil: 1500, severite: 'warning' });
   }
-
-  // 3. Investissement faible (< 10 % du budget, uniquement si budget > 500k)
   if (budgetTotal > 500000 && kpis.ratio_investissement < 10 && kpis.ratio_investissement > 0) {
     anomalies.push({ type: 'investissement_faible', valeur: kpis.ratio_investissement, seuil: 10, severite: 'warning' });
   }
 
-  // 4. Marchés MAPA au-dessus du seuil légal (214 000 € HT pour les collectivités)
   const SEUIL_AO = 214000;
   for (const m of marchesClean) {
     if (m.procedure && /adapt[eé]/i.test(m.procedure) && m.montant > SEUIL_AO) {
@@ -292,7 +285,6 @@ function aggregate(insee, geo, balances, marches, subventions) {
     }
   }
 
-  // 5. Marchés reconduits > 3 fois (même attributaire)
   const marcheCount = {};
   for (const m of marchesClean) {
     const key = m.attributaire.toLowerCase();
@@ -307,14 +299,14 @@ function aggregate(insee, geo, balances, marches, subventions) {
   return {
     insee,
     nom,
-    annee: DATA_YEAR,
+    annee: effectiveYear,
     budget_total: budgetTotal,
     chapitres,
     marches: marchesClean,
     subventions: subvClean,
     kpis,
     anomalies_auto: anomalies,
-    source: `DGFIP ${DATA_YEAR} · data.economie.gouv.fr`,
+    source: `DGFIP ${effectiveYear} · data.economie.gouv.fr`,
     cached_at: new Date().toISOString(),
   };
 }
