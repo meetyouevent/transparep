@@ -613,6 +613,36 @@ canvas#pie{
 .kcard-value.warn{color:var(--ember);}
 .kcard-unit{font-family:'DM Mono',monospace;font-size:.52rem;color:var(--soft);margin-top:3px;}
 
+/* Cartes spéciales (évolution, élus, fiscalité) */
+.xcard{
+  flex-shrink:0;width:clamp(190px,52vw,240px);
+  background:rgba(14,32,64,0.6);
+  border:1px solid var(--rim+);border-radius:18px;
+  padding:11px 13px;scroll-snap-align:start;
+  display:flex;align-items:center;gap:10px;cursor:pointer;
+  transition:border-color .2s,background .2s;
+  backdrop-filter:blur(20px) saturate(160%);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);
+}
+.xcard:hover{border-color:rgba(91,156,246,0.4);background:rgba(14,32,64,0.8);}
+.xcard:active{transform:scale(.97);}
+.xcard-icon{font-size:1.2rem;flex-shrink:0;}
+.xcard-body{flex:1;min-width:0;}
+.xcard-title{font-size:.72rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.xcard-sub{font-size:.6rem;color:var(--soft);margin-top:2px;}
+.xcard-spark{margin-top:4px;opacity:.85;}
+.xcard-right{font-size:.9rem;font-weight:700;flex-shrink:0;}
+.xcard-right .warn{color:var(--ember);}
+.xcard-right .ok{color:var(--sage);}
+
+/* Liste élus dans le drawer */
+.elu-list{display:flex;flex-direction:column;gap:6px;margin-top:4px;}
+.elu-row{padding:8px 10px;border-radius:10px;background:rgba(14,32,64,0.4);border:1px solid var(--rim);}
+.elu-maire{border-color:rgba(240,180,41,0.35);background:rgba(240,180,41,0.05);}
+.elu-fn{font-size:.58rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);margin-bottom:2px;}
+.elu-nm{font-size:.82rem;font-weight:700;color:var(--text);}
+.elu-meta{font-size:.62rem;color:var(--soft);margin-top:2px;}
+
 /* Bandeau mode démo */
 .demo-pill{
   position:fixed;
@@ -882,7 +912,7 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
   <div class="pie-field" id="pie-field">
     <div class="loading-overlay" id="loading-overlay">
       <div class="dots"><span></span><span></span><span></span></div>
-      <div class="lo-text" id="lo-text">Chargement des données DGFIP…</div>
+      <div class="lo-text" id="lo-text">Chargement OFGL · DGFIP · RNE…</div>
     </div>
     <canvas id="pie"></canvas>
     <div class="donut-center" id="donut-center">
@@ -1407,15 +1437,16 @@ function buildCards(items,total){
   if(depth===0&&ROOT.kpis&&ROOT.budget_total>0){
     const k=ROOT.kpis;
     const chips=[
-      {label:'Budget/hab.',  val:k.budget_par_habitant,  unit:'€ / habitant', warn:false},
-      {label:'Personnel',    val:k.ratio_personnel,      unit:'% du budget',  warn:k.ratio_personnel>35},
-      {label:'Investissement',val:k.ratio_investissement,unit:'% du budget',  warn:k.ratio_investissement<10&&k.ratio_investissement>0},
-      {label:'Dette/hab.',   val:k.dette_par_habitant,   unit:'€ / habitant', warn:k.dette_par_habitant>1500},
+      {label:'Budget/hab.',   val:k.budget_par_habitant,  unit:'€ / habitant', warn:false},
+      {label:'Personnel',     val:k.ratio_personnel,      unit:'% du budget',  warn:k.ratio_personnel>35},
+      {label:'Investissement',val:k.ratio_investissement, unit:'% du budget',  warn:k.ratio_investissement<10&&k.ratio_investissement>0},
+      {label:'Dette/hab.',    val:k.dette_par_habitant,   unit:'€ / habitant', warn:k.dette_par_habitant>1500},
+      {label:'Épargne brute', val:k.taux_epargne,         unit:'% des recettes',warn:k.taux_epargne>0&&k.taux_epargne<5},
     ].filter(c=>c.val>0);
     chips.forEach(c=>{
       const el=document.createElement('div');
       el.className='kcard';
-      const display=c.unit.includes('€')?fmt(c.val):c.val+'%';
+      const display=c.unit.startsWith('€')?fmt(c.val):c.val+'%';
       el.innerHTML=`<div class="kcard-label">${c.label}</div>
         <div class="kcard-value${c.warn?' warn':''}">${display}</div>
         <div class="kcard-unit">${c.unit}</div>`;
@@ -1429,9 +1460,7 @@ function buildCards(items,total){
     const card=document.createElement('div');
     card.className='icard'+(item.anomaly?' anomaly':'');
     card.style.setProperty('--color',color);
-
     const drill=item.isGrade?`${item.nb} ag.`:item.leaf?'📋':item.children?.length?'›':'';
-
     card.innerHTML=`
       <div class="icard-stripe" style="background:${color}"></div>
       <div class="icard-icon">${ico(item.label)}</div>
@@ -1441,16 +1470,64 @@ function buildCards(items,total){
       ${item.anomaly?`<div class="icard-badge">🚨</div>`:''}
       ${drill?`<div class="icard-drill">${drill}</div>`:''}
     `;
-    card.setAttribute('role','button');
-    card.setAttribute('tabindex','0');
+    card.setAttribute('role','button');card.setAttribute('tabindex','0');
     card.setAttribute('aria-label',`${item.label} : ${fmt(item.value)}, ${pct}% du budget${item.anomaly?' — anomalie détectée':''}`);
     card.addEventListener('click',()=>clickItem(i));
     card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();clickItem(i);}});
-    // touch highlight synced to pie
     card.addEventListener('touchstart',()=>{hiIdx=i;redraw();},{passive:true});
     card.addEventListener('touchend',()=>{hiIdx=-1;redraw();},{passive:true});
     scroll.appendChild(card);
   });
+
+  // ── Cartes spéciales (profondeur 0 uniquement) ─────────────
+  if(depth===0){
+    // Évolution temporelle OFGL
+    if(ROOT.evolution&&ROOT.evolution.length>1){
+      const evo=ROOT.evolution;
+      const el=document.createElement('div');
+      el.className='xcard';
+      const first=evo[0],last=evo[evo.length-1];
+      const pctDep=first.dep_fonct>0?Math.round((last.dep_fonct/first.dep_fonct-1)*100):0;
+      const arrow=pctDep>0?'↑':'↓';
+      const arrowCls=pctDep>15?'warn':pctDep<-5?'ok':'';
+      el.innerHTML=`<div class="xcard-icon">📈</div>
+        <div class="xcard-body">
+          <div class="xcard-title">Évolution ${first.annee}–${last.annee}</div>
+          <div class="xcard-sub xcard-spark">${evolSparklineSVG(evo,'dep_fonct','#5b9cf6',90,22)}</div>
+        </div>
+        <div class="xcard-right"><span class="${arrowCls}">${arrow}${Math.abs(pctDep)}%</span></div>`;
+      el.addEventListener('click',()=>openEvolDrawer());
+      scroll.appendChild(el);
+    }
+    // Élus municipaux (RNE)
+    if(ROOT.elus&&ROOT.elus.length>0){
+      const maire=ROOT.elus.find(e=>/maire/i.test(e.fonction)&&!/adjoint/i.test(e.fonction));
+      const el=document.createElement('div');
+      el.className='xcard';
+      el.innerHTML=`<div class="xcard-icon">🗳️</div>
+        <div class="xcard-body">
+          <div class="xcard-title">${ROOT.elus.length} élus municipaux <span style="color:var(--ghost);font-size:.6rem;font-weight:400">(RNE)</span></div>
+          <div class="xcard-sub">${maire?`Maire : ${esc(maire.prenom)} ${esc(maire.nom)}`:'Conseil municipal'}</div>
+        </div>
+        <div class="xcard-right" style="color:var(--sky)">›</div>`;
+      el.addEventListener('click',()=>openElusDrawer());
+      scroll.appendChild(el);
+    }
+    // Fiscalité locale (REI)
+    if(ROOT.fiscalite&&ROOT.fiscalite.tfpb){
+      const f=ROOT.fiscalite;
+      const el=document.createElement('div');
+      el.className='xcard';
+      el.innerHTML=`<div class="xcard-icon">🏦</div>
+        <div class="xcard-body">
+          <div class="xcard-title">Fiscalité locale ${f.annee||''} <span style="color:var(--ghost);font-size:.6rem;font-weight:400">(REI)</span></div>
+          <div class="xcard-sub">Taxe foncière : <strong>${f.tfpb}%</strong>${f.cfe?' · CFE : '+f.cfe+'%':''}</div>
+        </div>
+        <div class="xcard-right" style="color:var(--sky)">›</div>`;
+      el.addEventListener('click',()=>openFiscDrawer());
+      scroll.appendChild(el);
+    }
+  }
 }
 
 function redraw(){
@@ -1739,6 +1816,9 @@ function buildTreeFromAPI(d){
     children,
     kpis:d.kpis,
     anomalies_auto:anomalies,
+    fiscalite:d.fiscalite||null,
+    evolution:d.evolution||[],
+    elus:d.elus||[],
     source:d.source||'',
   };
 }
@@ -1813,7 +1893,7 @@ async function loadCityData(city){
   // ── Fetch API ─────────────────────────────────────
   const lo=document.getElementById('loading-overlay');
   const loTxt=document.getElementById('lo-text');
-  loTxt.textContent=`Chargement des données DGFIP…`;
+  loTxt.textContent=`Chargement OFGL · DGFIP · RNE…`;
   loTxt.classList.remove('lo-err');
   lo.classList.add('on');
 
@@ -1897,6 +1977,18 @@ function openDrawer(node){
   }else if(node.ltype==='pers'){
     tabs=[['inf','ℹ️ Info'],['ai','🤖 IA']];
     html=[buildPersInfo(node),buildAI(node)];
+  }else if(node.ltype==='elu'){
+    tabs=[['el','🗳️ Élu'],['ai','🤖 IA']];
+    html=[buildEluDetail(node.data),buildAI(node)];
+  }else if(node._isEvolDrawer){
+    tabs=[['ev','📈 Évolution']];
+    html=[node._evolHtml];
+  }else if(node._isElusDrawer){
+    tabs=[['el','🗳️ Élus']];
+    html=[node._elusHtml];
+  }else if(node._isFiscDrawer){
+    tabs=[['fi','🏦 Fiscalité']];
+    html=[node._fiscHtml];
   }else{
     tabs=[['dt','Détail'],['ai','🤖 IA']];
     html=[buildGeneric(node),buildAI(node)];
@@ -2039,6 +2131,155 @@ function buildGeneric(node){
     </tr>`).join('')}</tbody></table>`;
 }
 
+// ── Sparkline SVG ─────────────────────────────────────────
+function evolSparklineSVG(evo,key,color,W,H){
+  const vals=evo.map(e=>e[key]||0);
+  const mn=Math.min(...vals),mx=Math.max(...vals),range=mx-mn||1;
+  const pts=vals.map((v,i)=>{
+    const x=(i/(vals.length-1||1))*W;
+    const y=H-((v-mn)/range)*(H-2)-1;
+    return x+','+y;
+  }).join(' ');
+  return`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="overflow:visible;display:block">
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${(vals.length-1)/(vals.length-1||1)*W}" cy="${H-((vals[vals.length-1]-mn)/range)*(H-2)-1}" r="2.5" fill="${color}"/>
+  </svg>`;
+}
+
+// ── Drawer Évolution OFGL ─────────────────────────────────
+function openEvolDrawer(){
+  const evo=ROOT.evolution||[];
+  if(!evo.length)return;
+  const W=260,H=90;
+  const years=evo.map(e=>e.annee);
+  const svgDep=evolSparklineSVG(evo,'dep_fonct','#5b9cf6',W,H);
+  const svgInv=evolSparklineSVG(evo,'invest','#3ecf8e',W,H);
+  const svgDet=evolSparklineSVG(evo,'dette','#ff6b6b',W,H);
+  const rows=evo.map(e=>`<tr>
+    <td style="font-family:'DM Mono',monospace;font-size:.68rem;color:var(--gold)">${e.annee}</td>
+    <td class="r">${fmt(e.dep_fonct)}</td>
+    <td class="r">${e.invest?fmt(e.invest):'—'}</td>
+    <td class="r">${e.dette?fmt(e.dette):'—'}</td>
+    <td class="r">${e.epargne?fmt(e.epargne):'—'}</td>
+  </tr>`).join('');
+  const html=`
+    <div style="margin-bottom:14px">
+      <div style="font-size:.62rem;color:var(--ghost);margin-bottom:6px;text-transform:uppercase;letter-spacing:.1em">Dépenses de fonctionnement</div>
+      ${svgDep}
+      <div style="display:flex;justify-content:space-between;font-size:.6rem;color:var(--ghost);margin-top:2px">
+        <span>${years[0]}</span><span>${years[years.length-1]}</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div>
+        <div style="font-size:.58rem;color:var(--ghost);margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em">Investissements</div>
+        ${evolSparklineSVG(evo,'invest','#3ecf8e',120,45)}
+      </div>
+      <div>
+        <div style="font-size:.58rem;color:var(--ghost);margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em">Encours de dette</div>
+        ${evolSparklineSVG(evo,'dette','#ff6b6b',120,45)}
+      </div>
+    </div>
+    <table class="tbl" style="font-size:.65rem">
+      <thead><tr><th>Année</th><th>Dép. fonct.</th><th>Invest.</th><th>Dette</th><th>Épargne</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="font-size:.62rem;color:var(--ghost);margin-top:10px;line-height:1.5">Source : OFGL (Observatoire des Finances et de la Gestion Publique Locale) · data.ofgl.fr — données définitives vérifiées.</p>`;
+  const node={_isEvolDrawer:true,_evolHtml:html,color:'#5b9cf6',label:'Évolution budgétaire',value:0};
+  document.getElementById('drw-color').style.background=node.color;
+  document.getElementById('drw-title').textContent=node.label;
+  document.getElementById('drw-amt').textContent=`${years[0]}–${years[years.length-1]}`;
+  document.getElementById('drw-tabs').innerHTML=`<div class="dtab on" data-id="ev">📈 Évolution</div>`;
+  document.getElementById('drw-body').innerHTML=`<div class="dtc on" id="dtc-ev">${html}</div>`;
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('overlay').classList.add('on');
+}
+
+// ── Drawer Élus (RNE) ─────────────────────────────────────
+function openElusDrawer(){
+  const elus=ROOT.elus||[];
+  if(!elus.length)return;
+  const rows=elus.map(e=>{
+    const fonc=e.fonction||'';
+    const isMaire=/maire/i.test(fonc)&&!/adjoint/i.test(fonc);
+    const isAdj=/adjoint/i.test(fonc);
+    return`<div class="elu-row${isMaire?' elu-maire':''}">
+      <div class="elu-fn">${esc(fonc)}</div>
+      <div class="elu-nm">${esc(e.prenom)} ${esc(e.nom)}</div>
+      <div class="elu-meta">${e.age?e.age+' ans':''}${e.profession?' · '+esc(e.profession):''}${e.depuis?' · élu depuis '+e.depuis:''}</div>
+    </div>`;
+  }).join('');
+  const nbF=elus.filter(e=>e.sexe==='F').length;
+  const nbH=elus.filter(e=>e.sexe==='M').length;
+  const html=`
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="kcard" style="flex:1;min-width:80px"><div class="kcard-label">Total élus</div><div class="kcard-value">${elus.length}</div></div>
+      ${nbF>0?`<div class="kcard" style="flex:1;min-width:80px"><div class="kcard-label">Femmes</div><div class="kcard-value">${nbF}</div><div class="kcard-unit">${Math.round(nbF/elus.length*100)}%</div></div>`:''}
+      ${nbH>0?`<div class="kcard" style="flex:1;min-width:80px"><div class="kcard-label">Hommes</div><div class="kcard-value">${nbH}</div><div class="kcard-unit">${Math.round(nbH/elus.length*100)}%</div></div>`:''}
+    </div>
+    <div class="elu-list">${rows}</div>
+    <p style="font-size:.62rem;color:var(--ghost);margin-top:12px;line-height:1.5">Source : Répertoire National des Élus (RNE) · Ministère de l'Intérieur — mis à jour trimestriellement.</p>`;
+  document.getElementById('drw-color').style.background='#9b72cf';
+  document.getElementById('drw-title').textContent='Élus municipaux';
+  document.getElementById('drw-amt').textContent=`${elus.length} élus`;
+  document.getElementById('drw-tabs').innerHTML=`<div class="dtab on" data-id="el">🗳️ Élus</div>`;
+  document.getElementById('drw-body').innerHTML=`<div class="dtc on" id="dtc-el">${html}</div>`;
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('overlay').classList.add('on');
+}
+
+// ── Drawer Fiscalité (REI) ─────────────────────────────────
+function openFiscDrawer(){
+  const f=ROOT.fiscalite;
+  if(!f)return;
+  // Moyennes nationales de référence (valeurs 2023-2024 OFGL)
+  const MOY={tfpb:25.7,tfpnb:56.3,cfe:21.2};
+  function fiscRow(label,val,moy,unit='%'){
+    if(!val)return'';
+    const delta=(val-moy).toFixed(1);
+    const cls=val>moy*1.1?'warn':val<moy*0.9?'ok':'';
+    return`<tr>
+      <td style="font-size:.74rem;color:var(--soft)">${label}</td>
+      <td class="r"><strong>${val}${unit}</strong></td>
+      <td class="r" style="color:var(--ghost)">${moy}${unit}</td>
+      <td class="r"><span class="${cls}">${delta>0?'+':''}${delta}${unit}</span></td>
+    </tr>`;
+  }
+  const html=`
+    <p style="font-size:.72rem;color:var(--soft);margin-bottom:12px;line-height:1.5">Les taux ci-dessous sont les taux <strong>communaux</strong> votés par le conseil municipal. Ils s'appliquent aux bases calculées par l'administration fiscale.</p>
+    <table class="tbl">
+      <thead><tr><th>Taxe</th><th>Commune</th><th>Moy. nat.</th><th>Écart</th></tr></thead>
+      <tbody>
+        ${fiscRow('Taxe foncière bâti (TFB)',f.tfpb,MOY.tfpb)}
+        ${fiscRow('Taxe foncière non bâti',f.tfpnb,MOY.tfpnb)}
+        ${fiscRow('Cotisation foncière (CFE)',f.cfe,MOY.cfe)}
+      </tbody>
+    </table>
+    <p style="font-size:.62rem;color:var(--ghost);margin-top:12px;line-height:1.5">Données ${f.annee||''} · Source : REI (Recensement des Éléments d'Imposition) — OFGL · data.ofgl.fr<br>Moyennes nationales indicatives toutes communes confondues.</p>`;
+  document.getElementById('drw-color').style.background='#d4a017';
+  document.getElementById('drw-title').textContent='Fiscalité locale';
+  document.getElementById('drw-amt').textContent=f.annee||'';
+  document.getElementById('drw-tabs').innerHTML=`<div class="dtab on" data-id="fi">🏦 Fiscalité</div>`;
+  document.getElementById('drw-body').innerHTML=`<div class="dtc on" id="dtc-fi">${html}</div>`;
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('overlay').classList.add('on');
+}
+
+// ── Détail d'un élu individuel ────────────────────────────
+function buildEluDetail(e){
+  if(!e)return'';
+  return`<div class="pgrid">
+    <div class="pcard">
+      <div class="pc-role">${esc(e.fonction||'Conseiller municipal')}</div>
+      <div class="pc-name">${esc(e.prenom||'')} ${esc(e.nom||'')}</div>
+      <div class="pc-sal">${e.age?e.age+' ans':'Âge non renseigné'}</div>
+      <div class="pc-net">${esc(e.profession||'Profession non renseignée')}</div>
+      <div class="pc-base">${e.depuis?'Élu depuis '+e.depuis:''}</div>
+    </div>
+  </div>
+  <p style="font-size:.68rem;color:var(--ghost);margin-top:12px;line-height:1.5">Source : Répertoire National des Élus (RNE) · Ministère de l'Intérieur.<br>Les données de profession sont déclaratives.</p>`;
+}
+
 function buildAI(node){
   return`<div class="aib">
     <div class="aib-h"><span>Analyse IA</span><span class="aib-tag">Claude</span></div>
@@ -2097,6 +2338,20 @@ function renderAnomaly(an, view){
       action='Demandez les cahiers des charges et les offres reçues pour chaque reconduction de ce prestataire.';
       tag=`⚠️ Marché — ${an.attributaire}`;
       q=`Le prestataire "${an.attributaire}" apparaît ${an.nombre} fois dans les marchés publics. Quelles procédures de mise en concurrence ont été appliquées à chaque reconduction ?`;
+      break;
+    case'epargne_faible':
+      titre=`Épargne brute insuffisante : ${esc(an.valeur)}% des recettes`;
+      corps=`Le taux d'épargne brute est de <strong>${esc(an.valeur)}%</strong>, en dessous du seuil d'alerte de ${esc(an.seuil)}%. La commune génère trop peu de marges pour financer ses investissements sans recourir à l'emprunt. En dessous de 5%, la capacité d'autofinancement est considérée critique par la Cour des comptes.`;
+      action="Demandez le compte administratif, le tableau de financement et la projection pluriannuelle d'équilibre.";
+      tag=`⚠️ Épargne insuffisante`;
+      q=`Le taux d'épargne brute est de ${an.valeur}% des recettes de fonctionnement, en dessous du seuil d'alerte de ${an.seuil}%. Comment la commune prévoit-elle de financer ses investissements sans fragiliser davantage ses finances ?`;
+      break;
+    case'dette_hausse':
+      titre=`Dette en hausse de ${esc(an.valeur)}% sur ${esc(an.periode||'')}`;
+      corps=`L'encours de dette a augmenté de <strong>${esc(an.valeur)}%</strong> sur la période ${esc(an.periode||'')} pour atteindre ${fmt(an.montant||0)}. Une hausse rapide de la dette sans croissance parallèle des recettes dégrade la capacité de remboursement.`;
+      action="Demandez le tableau d'amortissement de chaque emprunt, les conditions et la durée résiduelle.";
+      tag=`⚠️ Hausse de la dette`;
+      q=`La dette a augmenté de ${an.valeur}% entre ${an.periode||'ces dernières années'}. Quels investissements ont justifié ces emprunts et quel est le plan de remboursement ?`;
       break;
     default:
       // Anomalies riches (mode démo ou types futurs avec titre/corps pré-remplis)
@@ -2201,6 +2456,8 @@ function computeScore(anomalies){
       case'investissement_faible': s-=10; break;
       case'marche_mapa_seuil':     s-=25; break;
       case'marche_reconduit':      s-=10; break;
+      case'epargne_faible':        s-=10; break;
+      case'dette_hausse':          s-=10; break;
       default: s-=(an.severite==='error'?15:7);
     }
   }
