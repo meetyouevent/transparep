@@ -16,7 +16,10 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 // ─── Années ─────────────────────────────────────────────
 // OFGL publie les données définitives pour l'année N en mars/avril N+1
 // DGFIP balances brutes publiées avec ~18-24 mois de décalage
-const START_YEAR = parseInt(process.env.DGFIP_YEAR || '') || (new Date().getFullYear() - 2);
+// OFGL_LATEST : dernière année certifiée disponible (données définitives)
+// → On ignore toute donnée OFGL au-delà (provisoires / budget primitif voté)
+const OFGL_LATEST = parseInt(process.env.OFGL_YEAR || '') || (new Date().getFullYear() - 2); // 2024 en 2026
+const START_YEAR  = parseInt(process.env.DGFIP_YEAR  || '') || OFGL_LATEST;
 const MAX_YEAR_FALLBACK = 3;
 
 // ─── URLs sources de données ─────────────────────────────
@@ -285,10 +288,11 @@ async function fetchSubventions(nomCommune) {
 
 function parseOFGL(rows) {
   // Regroupe par année → agregat → montant
+  // On ignore les années au-delà de OFGL_LATEST (budgets primitifs votés / données non définitives)
   const byYear = {};
   for (const row of rows) {
     const y = Number(row.exer);
-    if (!y) continue;
+    if (!y || y > OFGL_LATEST) continue;
     if (!byYear[y]) byYear[y] = {};
     const agr = (row.agregat || '').trim();
     byYear[y][agr] = Number(row.montant) || 0;
