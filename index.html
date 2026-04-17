@@ -1273,39 +1273,45 @@ function render(anim=true){
 
   // Floating labels
   const depth = nav.length-1;
-  const tagLabels = ['Budget communal','Catégories','Services · Personnel','Grades · Échelons'];
+  const geoTagLabels = ['Carte de France','Régions','Départements','Communes'];
+  const budTagLabels = ['Budget communal','Catégories','Services · Personnel','Grades · Échelons'];
+  const tagLabels = ROOT.isGeoNav ? geoTagLabels : budTagLabels;
   document.getElementById('lf-tag').textContent = tagLabels[Math.min(depth,3)];
   const nameEl = document.getElementById('lf-name');
   if(depth>0){ nameEl.textContent=node.label; nameEl.style.display='block'; }
   else{ nameEl.style.display='none'; }
 
   // Center
-  if(currentCity){
+  const scoreEl=document.getElementById('dc-score');
+  if(ROOT.isGeoNav){
+    const geoNames=['France','Régions','Départements','Communes'];
+    document.getElementById('dc-city').textContent = depth===0?'France':nav[1]?.label||node.label;
+    document.getElementById('dc-amount').innerHTML = `<strong>${fmtPop(total||node.value).replace(' hab.','')}</strong>`;
+    document.getElementById('dc-sub').textContent = depth===0?'population totale':(geoNames[depth]||'zones');
+    scoreEl.style.display='none';
+  }else if(currentCity){
     document.getElementById('dc-city').textContent = currentCity.nom;
     document.getElementById('dc-amount').innerHTML = `<strong>${fmt(total||node.value)}</strong>`;
     const anneeLabel = ROOT.annee ? ` · ${ROOT.annee}` : '';
     document.getElementById('dc-sub').textContent = depth===0?`budget total${anneeLabel}`:'sous-total';
-  }
-
-  // Score de transparence
-  const scoreEl=document.getElementById('dc-score');
-  if(depth===0&&ROOT.budget_total>0){
-    const score=computeScore(ROOT.anomalies_auto||[]);
-    const color=score>=80?'#3ecf8e':score>=60?'#f0b429':'#ff6b6b';
-    const label=score>=80?'Gestion saine':score>=60?'Vigilance':'À surveiller';
-    document.getElementById('dc-score-val').textContent=score+'/100';
-    document.getElementById('dc-score-val').style.color=color;
-    document.getElementById('dc-score-lbl').textContent=label;
-    scoreEl.style.display='flex';
-  }else{
-    scoreEl.style.display='none';
+    if(depth===0&&ROOT.budget_total>0){
+      const score=computeScore(ROOT.anomalies_auto||[]);
+      const color=score>=80?'#3ecf8e':score>=60?'#f0b429':'#ff6b6b';
+      const label=score>=80?'Gestion saine':score>=60?'Vigilance':'À surveiller';
+      document.getElementById('dc-score-val').textContent=score+'/100';
+      document.getElementById('dc-score-val').style.color=color;
+      document.getElementById('dc-score-lbl').textContent=label;
+      scoreEl.style.display='flex';
+    }else{
+      scoreEl.style.display='none';
+    }
   }
 
   // Back
   document.getElementById('back-btn').classList.toggle('on', nav.length>1);
 
   // Anomaly bar
-  const anomItems = items.filter(i=>i.anomaly);
+  const anomItems = ROOT.isGeoNav ? [] : items.filter(i=>i.anomaly);
   const abar = document.getElementById('anom-bar');
   if(anomItems.length){ abar.classList.add('vis'); document.getElementById('anom-count').textContent=anomItems.length; }
   else { abar.classList.remove('vis'); }
@@ -1432,9 +1438,9 @@ function buildCards(items,total){
   scroll.innerHTML='';
   if(!items.length)return;
 
-  // Chips KPI — visibles uniquement à la racine avec des données réelles
+  // Chips KPI — visibles uniquement à la racine budget avec des données réelles
   const depth=nav.length-1;
-  if(depth===0&&ROOT.kpis&&ROOT.budget_total>0){
+  if(!ROOT.isGeoNav&&depth===0&&ROOT.kpis&&ROOT.budget_total>0){
     const k=ROOT.kpis;
     const chips=[
       {label:'Budget/hab.',   val:k.budget_par_habitant,  unit:'€ / habitant', warn:false},
@@ -1460,6 +1466,26 @@ function buildCards(items,total){
     const card=document.createElement('div');
     card.className='icard'+(item.anomaly?' anomaly':'');
     card.style.setProperty('--color',color);
+    if(item.isGeoNav){
+      const popStr=fmtPop(item.value);
+      const drill=item.geoLevel===2?'📊':'›';
+      card.innerHTML=`
+        <div class="icard-stripe" style="background:${color}"></div>
+        <div class="icard-icon">${item.geoLevel===2?'🏛️':item.geoLevel===1?'🗺️':'🌍'}</div>
+        <div class="icard-name">${item.label}</div>
+        <div class="icard-pct">${pct}%</div>
+        <div class="icard-amt">${popStr}</div>
+        <div class="icard-drill">${drill}</div>
+      `;
+      card.setAttribute('role','button');card.setAttribute('tabindex','0');
+      card.setAttribute('aria-label',`${item.label} : ${popStr}, ${pct}% de la population`);
+      card.addEventListener('click',()=>clickItem(i));
+      card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();clickItem(i);}});
+      card.addEventListener('touchstart',()=>{hiIdx=i;redraw();},{passive:true});
+      card.addEventListener('touchend',()=>{hiIdx=-1;redraw();},{passive:true});
+      scroll.appendChild(card);
+      return;
+    }
     const drill=item.isGrade?`${item.nb} ag.`:item.leaf?'📋':item.children?.length?'›':'';
     card.innerHTML=`
       <div class="icard-stripe" style="background:${color}"></div>
@@ -1479,8 +1505,8 @@ function buildCards(items,total){
     scroll.appendChild(card);
   });
 
-  // ── Cartes spéciales (profondeur 0 uniquement) ─────────────
-  if(depth===0){
+  // ── Cartes spéciales (profondeur 0 uniquement, hors géo-nav) ──
+  if(!ROOT.isGeoNav&&depth===0){
     // Évolution temporelle OFGL
     if(ROOT.evolution&&ROOT.evolution.length>1){
       const evo=ROOT.evolution;
@@ -1545,7 +1571,7 @@ function buildBC(){
     if(i){const s=document.createElement('span');s.className='bc-sep';s.textContent='›';el.appendChild(s);}
     const d=document.createElement('div');
     d.className='bc-crumb'+(i===nav.length-1?' now':'');
-    d.textContent=i===0?(currentCity?.nom||'Budget'):node.label;
+    d.textContent=i===0?(ROOT.isGeoNav?'France':currentCity?.nom||'Budget'):node.label;
     if(i<nav.length-1){const idx=i;d.addEventListener('click',()=>{nav.splice(idx+1);hiIdx=-1;closeDrawer();render(true);});}
     el.appendChild(d);
   });
@@ -1595,6 +1621,7 @@ document.addEventListener('keydown',e=>{if((e.key==='Escape'||e.key==='Backspace
 function clickItem(idx){
   const node=cur(),item=node.children[idx];
   if(!item)return;
+  if(item.isGeoNav){drillGeoNode(item);return;}
   if(item.leaf){openDrawer(item);return;}
   if(item.children?.length){nav.push(item);hiIdx=-1;closeDrawer();render(true);return;}
   openDrawer(item);
@@ -1607,8 +1634,8 @@ function goBack(){
 
 function onLogoTap(){
   document.getElementById('items-scroll').scrollTo({left:0,behavior:'smooth'});
-  if(nav.length>1){nav=[ROOT];hiIdx=-1;closeDrawer();render(true);}
-  // Reset démo pill si on recharge
+  if(nav.length>1){nav=[ROOT];hiIdx=-1;closeDrawer();render(true);return;}
+  if(nav.length===1&&ROOT&&!ROOT.isGeoNav){loadFranceView();return;}
   if(!currentCity) document.getElementById('demo-pill').classList.remove('vis');
 }
 
@@ -2837,13 +2864,122 @@ function renderComparison(dataB){
 }
 
 // ═══════════════════════════════════════════
-//  INIT — permalink hash ou Cambrai par défaut
+//  GÉO-NAVIGATION — France → Régions → Depts → Communes
+// ═══════════════════════════════════════════
+async function loadFranceView(){
+  currentCity=null;
+  closeDrawer();
+  document.getElementById('sp-label').textContent='France';
+  document.getElementById('sp-label').classList.remove('has-city');
+  document.getElementById('sp-dept').style.display='none';
+  document.getElementById('share-btn').style.display='none';
+  document.getElementById('cmp-btn').style.display='none';
+  document.getElementById('demo-pill').classList.remove('vis');
+  document.getElementById('alert-badge').style.display='none';
+  history.replaceState(null,'',location.pathname);
+
+  const lo=document.getElementById('loading-overlay');
+  const loTxt=document.getElementById('lo-text');
+  loTxt.textContent='Chargement données géographiques…';
+  loTxt.classList.remove('lo-err');
+  lo.classList.add('on');
+
+  try{
+    const r=await fetch('https://geo.api.gouv.fr/departements?fields=nom,code,codeRegion,region,population');
+    const depts=await r.json();
+    const regionMap={};
+    for(const d of depts){
+      const rc=d.codeRegion, rn=d.region?.nom||d.codeRegion;
+      if(!regionMap[rc]) regionMap[rc]={nom:rn,code:rc,population:0,depts:[]};
+      regionMap[rc].population+=(d.population||0);
+      regionMap[rc].depts.push({nom:d.nom,code:d.code,population:d.population||0});
+    }
+    const regions=Object.values(regionMap).sort((a,b)=>b.population-a.population);
+    const total=regions.reduce((s,rg)=>s+rg.population,0);
+    ROOT={
+      label:'France',value:total,
+      isGeoNav:true,geoLevel:-1,
+      children:regions.map((rg,i)=>({
+        label:rg.nom,value:rg.population,
+        color:COLORS[i%COLORS.length],
+        isGeoNav:true,geoLevel:0,geoCode:rg.code,
+        _depts:rg.depts,
+      })),
+    };
+    nav=[ROOT];hiIdx=-1;
+    lo.classList.remove('on');
+    render(true);
+    showToast('🌍 France · navigation géographique');
+  }catch(err){
+    console.error('[loadFranceView]',err.message);
+    lo.classList.remove('on');
+    const DEFAULT_CITY={nom:'Cambrai',code:'59122',deptNum:'59',dept:'Nord',pop:32500,cp:'59400'};
+    loadCityData(DEFAULT_CITY);
+  }
+}
+
+async function drillGeoNode(node){
+  if(node.geoLevel===0){
+    // Région → départements
+    const depts=[...node._depts].sort((a,b)=>b.population-a.population);
+    const regionNode={
+      label:node.label,value:node.value,color:node.color,
+      isGeoNav:true,geoLevel:1,geoCode:node.geoCode,
+      children:depts.map((d,i)=>({
+        label:d.nom,value:d.population,
+        color:COLORS[i%COLORS.length],
+        isGeoNav:true,geoLevel:1,geoCode:d.code,
+      })),
+    };
+    nav.push(regionNode);hiIdx=-1;closeDrawer();render(true);
+  }else if(node.geoLevel===1){
+    // Département → communes (top 20 par population)
+    const lo=document.getElementById('loading-overlay');
+    const loTxt=document.getElementById('lo-text');
+    loTxt.textContent=`Communes du ${node.label}…`;
+    loTxt.classList.remove('lo-err');
+    lo.classList.add('on');
+    try{
+      const r=await fetch(`https://geo.api.gouv.fr/departements/${encodeURIComponent(node.geoCode)}/communes?fields=nom,code,codesPostaux,codeDepartement,departement,population&limit=100`);
+      const communes=await r.json();
+      communes.sort((a,b)=>(b.population||0)-(a.population||0));
+      const top=communes.slice(0,20);
+      const deptNode={
+        label:node.label,value:node.value,
+        isGeoNav:true,geoLevel:2,geoCode:node.geoCode,
+        children:top.map((c,i)=>({
+          label:c.nom,value:c.population||0,
+          color:COLORS[i%COLORS.length],
+          isGeoNav:true,geoLevel:2,geoCode:c.code,
+          leaf:true,
+          _city:{
+            nom:c.nom,code:c.code,
+            deptNum:c.codeDepartement,
+            dept:c.departement?.nom||c.codeDepartement,
+            cp:c.codesPostaux?.[0]||'',
+            pop:c.population||0,
+          },
+        })),
+      };
+      lo.classList.remove('on');
+      nav.push(deptNode);hiIdx=-1;closeDrawer();render(true);
+    }catch(err){
+      console.error('[drillGeoNode]',err.message);
+      lo.classList.remove('on');
+    }
+  }else if(node.geoLevel===2&&node._city){
+    pickCity(node._city);
+  }
+}
+
+// ═══════════════════════════════════════════
+//  INIT — permalink hash ou France par défaut
 // ═══════════════════════════════════════════
 const DEFAULT_CITY={nom:'Cambrai',code:'59122',deptNum:'59',dept:'Nord',pop:32500,cp:'59400'};
 
 async function initFromHash(){
   const m=location.hash.match(/^#(\d{5})$/);
-  if(!m){loadCityData(DEFAULT_CITY);return;}
+  if(!m){loadFranceView();return;}
   const insee=m[1];
   try{
     const r=await fetch(`https://geo.api.gouv.fr/communes/${insee}?fields=nom,code,codesPostaux,codeDepartement,departement,population`);
@@ -2858,7 +2994,7 @@ async function initFromHash(){
     };
     loadCityData(city);
   }catch{
-    loadCityData(DEFAULT_CITY);
+    loadFranceView();
   }
 }
 initFromHash();
