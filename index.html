@@ -196,6 +196,20 @@ body{
   padding:0 4px 10px;margin-top:16px;
 }
 .so-section-head:first-child{margin-top:4px;}
+.so-chips{
+  display:flex;flex-wrap:wrap;gap:8px;padding:0 4px 8px;
+}
+.so-chip{
+  font-family:'Cabinet Grotesk',sans-serif;
+  font-size:.82rem;font-weight:700;color:var(--text);
+  background:var(--glass);
+  border:1px solid var(--rim+);
+  border-radius:18px;padding:8px 15px;
+  cursor:pointer;
+  transition:all .18s;
+}
+.so-chip:hover{border-color:rgba(240,180,41,0.4);color:var(--gold+);}
+.so-chip:active{transform:scale(.94);}
 
 .so-item{
   display:flex;align-items:center;gap:14px;
@@ -254,11 +268,13 @@ body{
   position:absolute;top:0;left:0;right:0;
   padding:6px 20px;
   display:flex;align-items:center;gap:8px;
+  flex-wrap:wrap;row-gap:4px;
   z-index:10;pointer-events:none;
 }
 .lf-tag{
   font-family:'DM Mono',monospace;
   font-size:0.58rem;font-weight:500;letter-spacing:.12em;
+  white-space:nowrap;
   text-transform:uppercase;color:var(--ghost);
   background:var(--glass);
   border:1px solid var(--rim);
@@ -273,6 +289,15 @@ body{
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   flex:1;
 }
+.lf-hint{
+  font-family:'DM Mono',monospace;
+  font-size:0.6rem;letter-spacing:.03em;
+  color:var(--gold);opacity:.85;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  width:100%;
+  animation:hint-pulse 2.4s ease-in-out infinite;
+}
+@keyframes hint-pulse{0%,100%{opacity:.85;}50%{opacity:.45;}}
 
 /* Breadcrumb — also floating */
 .bc-float{
@@ -329,24 +354,31 @@ canvas#pie{
   transform:translate(-50%,-50%);
   text-align:center;pointer-events:none;z-index:5;
   transition:all .3s;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  overflow:hidden;border-radius:50%;
+  padding:8%;
 }
 .dc-city{
   font-family:'DM Mono',monospace;
-  font-size:0.58rem;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--ghost);margin-bottom:2px;
+  font-size:0.55rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--soft);margin-bottom:2px;
   transition:all .3s;
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+.dc-city--long{font-size:0.46rem;letter-spacing:.02em;}
 .dc-amount{
   font-family:'Fraunces',serif;
-  font-size:clamp(1.1rem,6.5vw,1.8rem);
+  font-size:clamp(1rem,5.5vw,1.55rem);
   font-weight:300;font-style:italic;
   color:var(--text);line-height:1;
   transition:all .3s;
+  max-width:100%;white-space:nowrap;
 }
 .dc-amount strong{font-weight:600;color:var(--gold);}
 .dc-sub{
-  font-size:0.6rem;color:var(--ghost);margin-top:3px;
+  font-size:0.55rem;color:var(--ghost);margin-top:3px;
   font-family:'DM Mono',monospace;
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 
 /* ═══════════════════════════════════════════
@@ -616,9 +648,10 @@ canvas#pie{
 /* Cartes spéciales (évolution, élus, fiscalité) */
 .xcard{
   flex-shrink:0;width:clamp(190px,52vw,240px);
+  align-self:center;
   background:rgba(14,32,64,0.6);
   border:1px solid var(--rim+);border-radius:18px;
-  padding:11px 13px;scroll-snap-align:start;
+  padding:14px 13px;scroll-snap-align:start;
   display:flex;align-items:center;gap:10px;cursor:pointer;
   transition:border-color .2s,background .2s;
   backdrop-filter:blur(20px) saturate(160%);
@@ -900,6 +933,7 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
   <div class="level-float">
     <div class="lf-tag" id="lf-tag">Budget communal</div>
     <div class="lf-name" id="lf-name" style="display:none"></div>
+    <div class="lf-hint" id="lf-hint" style="display:none"></div>
   </div>
   <nav class="bc-float" id="bc-float" aria-label="Navigation fil d'Ariane"></nav>
 
@@ -933,7 +967,7 @@ abbr[data-tip]:hover::after,abbr[data-tip]:focus::after{opacity:1;}
 <div class="items-strip" id="items-strip">
   <div class="anom-bar" id="anom-bar" role="button" tabindex="0" aria-label="Voir les anomalies détectées" onclick="openAllAnomalies()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAllAnomalies();}">
     <div class="anom-bar-l">
-      <div class="anom-bar-title">🚨 <span id="anom-count">2</span> anomalies à ce niveau</div>
+      <div class="anom-bar-title" id="anom-bar-title">🚨 2 anomalies à ce niveau</div>
       <div class="anom-bar-sub">Questions prêtes pour votre prochain CM</div>
     </div>
     <div class="anom-bar-cta">Voir →</div>
@@ -1057,8 +1091,8 @@ const ico = l => ICONS[l] || '📌';
 // ═══════════════════════════════════════════
 //  UTILS
 // ═══════════════════════════════════════════
-const fmt = n => n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' M€':n>=1e3?Math.round(n/1e3)+'k€':n+'€';
-const fmtPop = n => !n?'':n>=1e6?(n/1e6).toFixed(1)+'M hab.':n>=1e3?Math.round(n/1e3)+'k hab.':n+' hab.';
+const fmt = n => n>=1e6?(n/1e6).toFixed(1).replace('.',',').replace(/,0$/,'')+' M€':n>=1e3?Math.round(n/1e3)+' k€':n+' €';
+const fmtPop = n => !n?'':n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' M hab.':n>=1e3?Math.round(n/1e3)+' 000 hab.':n+' hab.';
 function cityEmoji(pop){
   if(pop>500000)return'🌆';if(pop>100000)return'🏙️';
   if(pop>20000)return'🏘️';if(pop>5000)return'🏡';return'🏠';
@@ -1165,6 +1199,8 @@ function personnel(){
 
 function makeRoot(cityName){
   return{label:`Budget ${cityName} 2022`,value:52000000,cityName,
+    budget_total:52000000,annee:2022,
+    kpis:{budget_par_habitant:1600,ratio_personnel:38.5,ratio_investissement:9.2,dette_par_habitant:1720,taux_epargne:4.1,population:32500},
     children:[
       personnel(),
       {label:'Charges générales',value:8200000,color:COLORS[2],children:[
@@ -1273,25 +1309,41 @@ function render(anim=true){
 
   // Floating labels
   const depth = nav.length-1;
-  const geoTagLabels = ['Carte de France','Régions','Départements','Communes'];
+  const geoTagLabels = ['🇫🇷 Régions de France','Départements','Communes'];
   const budTagLabels = ['Budget communal','Catégories','Services · Personnel','Grades · Échelons'];
   const tagLabels = ROOT.isGeoNav ? geoTagLabels : budTagLabels;
-  document.getElementById('lf-tag').textContent = tagLabels[Math.min(depth,3)];
+  document.getElementById('lf-tag').textContent = tagLabels[Math.min(depth,tagLabels.length-1)];
   const nameEl = document.getElementById('lf-name');
   if(depth>0){ nameEl.textContent=node.label; nameEl.style.display='block'; }
   else{ nameEl.style.display='none'; }
 
+  // Hint contextuel — uniquement à la racine (le fil d'Ariane guide ensuite)
+  const hintEl=document.getElementById('lf-hint');
+  if(hintEl){
+    let hint='';
+    if(depth===0&&items.length){
+      hint=ROOT.isGeoNav?'👆 Touchez une région pour explorer':'👆 Touchez une part pour le détail';
+    }
+    hintEl.textContent=hint;
+    hintEl.style.display=hint?'block':'none';
+  }
+
   // Center
   const scoreEl=document.getElementById('dc-score');
   if(ROOT.isGeoNav){
-    const geoNames=['France','Régions','Départements','Communes'];
-    document.getElementById('dc-city').textContent = depth===0?'France':nav[1]?.label||node.label;
-    document.getElementById('dc-amount').innerHTML = `<strong>${fmtPop(total||node.value).replace(' hab.','')}</strong>`;
-    document.getElementById('dc-sub').textContent = depth===0?'population totale':(geoNames[depth]||'zones');
+    const cityEl=document.getElementById('dc-city');
+    const geoName=depth===0?'France':node.label;
+    cityEl.textContent=geoName;
+    cityEl.classList.toggle('dc-city--long',geoName.length>10);
+    document.getElementById('dc-amount').innerHTML = `<strong>${fmtPop(node.value||total).replace(' hab.','')}</strong>`;
+    document.getElementById('dc-sub').textContent = 'habitants';
     scoreEl.style.display='none';
   }else if(currentCity){
-    document.getElementById('dc-city').textContent = currentCity.nom;
-    document.getElementById('dc-amount').innerHTML = `<strong>${fmt(total||node.value)}</strong>`;
+    const cityEl=document.getElementById('dc-city');
+    cityEl.textContent=currentCity.nom;
+    cityEl.classList.toggle('dc-city--long',currentCity.nom.length>10);
+    const centerVal = depth===0 ? (ROOT.budget_total||total||node.value) : (total||node.value);
+    document.getElementById('dc-amount').innerHTML = `<strong>${fmt(centerVal)}</strong>`;
     const anneeLabel = ROOT.annee ? ` · ${ROOT.annee}` : '';
     document.getElementById('dc-sub').textContent = depth===0?`budget total${anneeLabel}`:'sous-total';
     if(depth===0&&ROOT.budget_total>0){
@@ -1313,7 +1365,10 @@ function render(anim=true){
   // Anomaly bar
   const anomItems = ROOT.isGeoNav ? [] : items.filter(i=>i.anomaly);
   const abar = document.getElementById('anom-bar');
-  if(anomItems.length){ abar.classList.add('vis'); document.getElementById('anom-count').textContent=anomItems.length; }
+  if(anomItems.length){
+    abar.classList.add('vis');
+    document.getElementById('anom-bar-title').textContent=`🚨 ${anomItems.length} anomalie${anomItems.length>1?'s':''} à ce niveau`;
+  }
   else { abar.classList.remove('vis'); }
 
   buildBC();
@@ -1334,7 +1389,7 @@ function drawPie(items,total,anim){
   cv.style.width=W+'px'; cv.style.height=H+'px';
 
   // Size donut center overlay
-  const IR_ratio = 0.28;
+  const IR_ratio = 0.34;
   const R_val = Math.min(W/2,H/2)*0.88;
   const holePx = R_val*IR_ratio*2;
   const dc=document.getElementById('donut-center');
@@ -1347,7 +1402,7 @@ function drawPie(items,total,anim){
 
   const cx=W/2, cy=H/2;
   const R=Math.min(W/2,H/2)*0.88;
-  const IR=R*0.28;
+  const IR=R*0.34;
   const gap=items.length>7?0.007:0.012;
 
   const slices=[];
@@ -1452,7 +1507,7 @@ function buildCards(items,total){
     chips.forEach(c=>{
       const el=document.createElement('div');
       el.className='kcard';
-      const display=c.unit.startsWith('€')?fmt(c.val):c.val+'%';
+      const display=c.unit.startsWith('€')?Math.round(c.val).toLocaleString('fr-FR')+' €':String(c.val).replace('.',',')+' %';
       el.innerHTML=`<div class="kcard-label">${c.label}</div>
         <div class="kcard-value${c.warn?' warn':''}">${display}</div>
         <div class="kcard-unit">${c.unit}</div>`;
@@ -1551,6 +1606,34 @@ function buildCards(items,total){
         </div>
         <div class="xcard-right" style="color:var(--sky)">›</div>`;
       el.addEventListener('click',()=>openFiscDrawer());
+      scroll.appendChild(el);
+    }
+    // Marchés publics (DECP)
+    if(ROOT.marches&&ROOT.marches.length){
+      const tot=ROOT.marches.reduce((a,m)=>a+Number(m.montant),0);
+      const el=document.createElement('div');
+      el.className='xcard';
+      el.innerHTML=`<div class="xcard-icon">💼</div>
+        <div class="xcard-body">
+          <div class="xcard-title">${ROOT.marches.length} marchés publics <span style="color:var(--ghost);font-size:.6rem;font-weight:400">(DECP)</span></div>
+          <div class="xcard-sub">Qui remporte les contrats ? <strong>${fmt(tot)}</strong></div>
+        </div>
+        <div class="xcard-right" style="color:var(--sky)">›</div>`;
+      el.addEventListener('click',()=>openMarchesDrawer());
+      scroll.appendChild(el);
+    }
+    // Subventions aux associations
+    if(ROOT.subventions&&ROOT.subventions.length){
+      const tot=ROOT.subventions.reduce((a,s)=>a+Number(s.montant),0);
+      const el=document.createElement('div');
+      el.className='xcard';
+      el.innerHTML=`<div class="xcard-icon">🤝</div>
+        <div class="xcard-body">
+          <div class="xcard-title">${ROOT.subventions.length} subventions versées</div>
+          <div class="xcard-sub">Aux associations locales · <strong>${fmt(tot)}</strong></div>
+        </div>
+        <div class="xcard-right" style="color:var(--sky)">›</div>`;
+      el.addEventListener('click',()=>openSubvDrawer());
       scroll.appendChild(el);
     }
   }
@@ -1702,20 +1785,46 @@ soInp.addEventListener('keydown',e=>{
   else if(e.key==='Enter'){e.preventDefault();if(soFocus>=0&&soResults[soFocus])pickCity(soResults[soFocus]);else if(soResults[0])pickCity(soResults[0]);}
 });
 
+// Grandes villes proposées d'office — accès en un tap
+const POPULAR_CITIES=[
+  {nom:'Paris',code:'75056',dept:'Paris',deptNum:'75',cp:'75001',pop:2133111},
+  {nom:'Marseille',code:'13055',dept:'Bouches-du-Rhône',deptNum:'13',cp:'13001',pop:873076},
+  {nom:'Lyon',code:'69123',dept:'Rhône',deptNum:'69',cp:'69001',pop:522969},
+  {nom:'Toulouse',code:'31555',dept:'Haute-Garonne',deptNum:'31',cp:'31000',pop:504078},
+  {nom:'Nice',code:'06088',dept:'Alpes-Maritimes',deptNum:'06',cp:'06000',pop:348085},
+  {nom:'Nantes',code:'44109',dept:'Loire-Atlantique',deptNum:'44',cp:'44000',pop:323204},
+  {nom:'Lille',code:'59350',dept:'Nord',deptNum:'59',cp:'59000',pop:236234},
+  {nom:'Bordeaux',code:'33063',dept:'Gironde',deptNum:'33',cp:'33000',pop:261804},
+];
+
 function showRecentResults(){
   const r=getRecent();
   const el=document.getElementById('so-results');
+  const popularHTML=`<div class="so-section-head">Grandes villes</div>
+    <div class="so-chips">${POPULAR_CITIES.map((c,i)=>`<button class="so-chip" data-pop="${i}">${esc(c.nom)}</button>`).join('')}</div>`;
   if(!r.length){
-    el.innerHTML=`<div class="so-empty">
+    el.innerHTML=popularHTML+`<div class="so-empty">
       <div style="font-size:2.5rem;margin-bottom:12px">🔍</div>
-      Tapez le nom de votre commune<br>
-      <span style="font-size:.75rem;color:var(--ghost);margin-top:6px;display:block">35 357 communes disponibles</span>
+      Ou tapez le nom de votre commune<br>
+      <span style="font-size:.75rem;color:var(--ghost);margin-top:6px;display:block">35 000 communes disponibles</span>
     </div>`;
-    soResults=[]; return;
+    soResults=[];
+    bindSOChips();
+    return;
   }
-  el.innerHTML=`<div class="so-section-head">Dernières recherches</div>`+r.map((c,i)=>soItemHTML(c,i,'🕐')).join('');
+  el.innerHTML=`<div class="so-section-head">Dernières recherches</div>`+r.map((c,i)=>soItemHTML(c,i,'🕐')).join('')+popularHTML;
   soResults=r;
   bindSOItems();
+  bindSOChips();
+}
+
+function bindSOChips(){
+  document.querySelectorAll('.so-chip').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const c=POPULAR_CITIES[Number(btn.dataset.pop)];
+      if(c)pickCity(c);
+    });
+  });
 }
 
 async function searchGeo(q){
@@ -1778,59 +1887,32 @@ function buildTreeFromAPI(d){
   if(!d||typeof d!=='object') return makeRoot('Commune');
   const C=COLORS;
   const chapEntries=Object.entries(d.chapitres||{});
-  const chapChildren=chapEntries
+  // Le camembert racine = directement les chapitres du budget (triés du + gros au + petit)
+  const children=chapEntries
     .filter(([,ch])=>Number(ch.depense)>0)
-    .map(([code,ch],i)=>({
+    .map(([code,ch])=>({
       label:ch.lib||`Chapitre ${code}`,
       value:Number(ch.depense)||0,
-      color:C[i%C.length],
       leaf:true,
-      ltype:'inv',
-      data:{m:`CHAP-${code}`,a:'DGFIP',p:'Comptabilité M14',inv:[]},
-    }));
+      ltype:'chap',
+      chapCode:code,
+    }))
+    .sort((a,b)=>b.value-a.value)
+    .map((c,i)=>({...c,color:C[i%C.length]}));
 
-  const marchesChildren=(d.marches||[]).filter(m=>Number(m.montant)>0).map((m,i)=>({
-    label:m.objet||m.ref||'Marché',
-    value:Number(m.montant),
-    color:C[(i+2)%C.length],
-    leaf:true,
-    ltype:'inv',
-    data:{m:m.ref,a:m.attributaire,p:m.procedure,inv:[
-      {n:m.ref,d:m.objet,s:m.attributaire,v:Number(m.montant),dt:m.date,f:'ok'},
-    ]},
-  }));
+  // Marchés publics & subventions : listes accessibles via cartes dédiées (déjà inclus dans les chapitres comptables — pas de double comptage dans le camembert)
+  const marches=(d.marches||[]).filter(m=>Number(m.montant)>0);
+  const subventions=(d.subventions||[]).filter(s=>Number(s.montant)>0);
 
-  const subvChildren=(d.subventions||[]).filter(s=>Number(s.montant)>0).map((s,i)=>({
-    label:s.beneficiaire||'Association',
-    value:Number(s.montant),
-    color:C[(i+4)%C.length],
-    leaf:true,
-    ltype:'pers',
-    data:{role:s.beneficiaire,grade:s.objet||'',brut:fmtEur(Number(s.montant)),net:'',base:s.annee?`Convention ${s.annee}`:'',note:''},
-  }));
-
-  const children=[];
-  if(chapChildren.length) children.push({label:'Budget par chapitres',value:chapChildren.reduce((a,c)=>a+c.value,0),color:C[0],children:chapChildren});
-  if(marchesChildren.length) children.push({label:'Marchés publics',value:marchesChildren.reduce((a,c)=>a+c.value,0),color:C[3],children:marchesChildren});
-  if(subvChildren.length) children.push({label:'Subventions',value:subvChildren.reduce((a,c)=>a+c.value,0),color:C[4],children:subvChildren});
-
-  // Anomalies → injecter dans les nœuds concernés pour colorer le camembert
+  // Anomalies → colorer les parts du camembert concernées
   const anomalies=d.anomalies_auto||[];
   for(const an of anomalies){
     if(an.type==='ratio_personnel_eleve'){
-      const node=chapChildren.find(c=>c.label.toLowerCase().includes('personnel'));
+      const node=children.find(c=>c.label.toLowerCase().includes('personnel'));
       if(node) node.anomaly=`⚠ Ratio ${an.valeur}% > seuil ${an.seuil}%`;
     }
-    if(an.type==='marche_reconduit'){
-      const node=marchesChildren.find(c=>c.data?.a?.toLowerCase()===an.attributaire);
-      if(node) node.anomaly=`⚠ Reconduit ${an.nombre} fois`;
-    }
-    if(an.type==='marche_mapa_seuil'){
-      const node=marchesChildren.find(c=>c.data?.m===an.ref);
-      if(node) node.anomaly=`🚨 MAPA > seuil légal`;
-    }
     if(an.type==='investissement_faible'){
-      const node=chapChildren.find(c=>['20','21','23'].some(p=>c.data?.m?.includes(p)));
+      const node=children.find(c=>['20','21','23'].includes(c.chapCode));
       if(node) node.anomaly=`⚠ Investissement ${an.valeur}% < ${an.seuil}%`;
     }
   }
@@ -1838,11 +1920,14 @@ function buildTreeFromAPI(d){
   return{
     label:`Budget ${d.nom} ${d.annee||''}`.trim(),
     value:d.budget_total||children.reduce((a,c)=>a+c.value,0),
+    budget_total:d.budget_total||0,
     cityName:d.nom,
     annee:d.annee,
     children,
     kpis:d.kpis,
     anomalies_auto:anomalies,
+    marches,
+    subventions,
     fiscalite:d.fiscalite||null,
     evolution:d.evolution||[],
     elus:d.elus||[],
@@ -1889,6 +1974,7 @@ function shareCity(){
 async function loadCityData(city){
   currentCity=city;
   closeDrawer();
+  document.title=`${city.nom} — TranspaRép`;
 
   // Update search pill immediately
   document.getElementById('sp-label').textContent=city.nom;
@@ -2004,6 +2090,9 @@ function openDrawer(node){
   }else if(node.ltype==='pers'){
     tabs=[['inf','ℹ️ Info'],['ai','🤖 IA']];
     html=[buildPersInfo(node),buildAI(node)];
+  }else if(node.ltype==='chap'){
+    tabs=[['ch','💡 C\'est quoi ?'],['ai','🤖 IA']];
+    html=[buildChapInfo(node),buildAI(node)];
   }else if(node.ltype==='elu'){
     tabs=[['el','🗳️ Élu'],['ai','🤖 IA']];
     html=[buildEluDetail(node.data),buildAI(node)];
@@ -2223,6 +2312,99 @@ function openEvolDrawer(){
 }
 
 // ── Drawer Élus (RNE) ─────────────────────────────────────
+// ── Explications citoyennes des chapitres comptables ──────
+const CHAP_EXPLAIN={
+  '011':{ico:'🏢',txt:"Les achats du quotidien de la mairie : électricité, chauffage, fournitures, carburant, entretien des bâtiments et des espaces publics…"},
+  '012':{ico:'👥',txt:"Les salaires et cotisations de tous les agents municipaux : personnels des écoles, espaces verts, état civil, police municipale, administration…"},
+  '014':{ico:'↩️',txt:"De la fiscalité que la commune reverse à d'autres collectivités (mécanismes de péréquation et de solidarité entre communes)."},
+  '65': {ico:'🤝',txt:"Les participations obligatoires et subventions versées : centre communal d'action sociale (CCAS), associations, écoles privées sous contrat…"},
+  '66': {ico:'🏦',txt:"Les intérêts payés sur les emprunts de la commune. Plus la dette est élevée, plus cette part grossit."},
+  '67': {ico:'⚡',txt:"Les charges exceptionnelles : annulations de titres, pénalités, secours d'urgence…"},
+  '16': {ico:'💳',txt:"Le remboursement du capital des emprunts contractés par la commune (la part intérêts est dans les charges financières)."},
+  '20': {ico:'📐',txt:"Les investissements immatériels : études, logiciels, licences…"},
+  '21': {ico:'🏗️',txt:"Les achats durables : terrains, bâtiments, véhicules, mobilier, équipements sportifs et scolaires…"},
+  '23': {ico:'🚧',txt:"Les chantiers en cours : constructions neuves, rénovations lourdes, aménagements urbains…"},
+};
+function buildChapInfo(node){
+  const ex=CHAP_EXPLAIN[node.chapCode]||{ico:'📋',txt:"Dépenses regroupées selon la nomenclature comptable des communes (M14/M57)."};
+  const pop=ROOT.kpis?.population||0;
+  const totalBudget=ROOT.budget_total||ROOT.value||1;
+  const pct=((node.value/totalBudget)*100).toFixed(1);
+  const parHab=pop?Math.round(node.value/pop):0;
+  return aBlk(node.anomaly||'')+`
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:14px">
+      <div style="font-size:2rem;line-height:1">${ex.ico}</div>
+      <p style="font-size:.82rem;line-height:1.55;color:var(--text)">${ex.txt}</p>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="kcard" style="flex:1;min-width:90px"><div class="kcard-label">Montant</div><div class="kcard-value">${fmt(node.value)}</div><div class="kcard-unit">en ${ROOT.annee||'—'}</div></div>
+      <div class="kcard" style="flex:1;min-width:90px"><div class="kcard-label">Part du budget</div><div class="kcard-value">${pct}%</div></div>
+      ${parHab?`<div class="kcard" style="flex:1;min-width:90px"><div class="kcard-label">Par habitant</div><div class="kcard-value">${parHab} €</div><div class="kcard-unit">par an</div></div>`:''}
+    </div>
+    <p style="font-size:.62rem;color:var(--ghost);margin-top:12px;line-height:1.5">Chapitre ${esc(node.chapCode||'')} — nomenclature comptable M14/M57 · Source : ${esc(ROOT.source||'DGFIP')}.</p>`;
+}
+
+// ── Drawer Marchés publics ────────────────────────────────
+function openMarchesDrawer(){
+  const list=ROOT.marches||[];
+  if(!list.length)return;
+  const anomalies=ROOT.anomalies_auto||[];
+  const flaggedRefs=new Set(anomalies.filter(a=>a.type==='marche_mapa_seuil').map(a=>a.ref));
+  const flaggedAttr=new Set(anomalies.filter(a=>a.type==='marche_reconduit').map(a=>a.attributaire));
+  const total=list.reduce((a,m)=>a+Number(m.montant),0);
+  const rows=[...list].sort((a,b)=>b.montant-a.montant).map(m=>{
+    const warn=flaggedRefs.has(m.ref)||flaggedAttr.has((m.attributaire||'').toLowerCase());
+    return`<div class="elu-row${warn?' elu-maire':''}">
+      <div class="elu-fn">${esc(m.attributaire||'—')}${warn?' ⚠':''}</div>
+      <div class="elu-nm">${esc(m.objet||m.ref||'Marché')}</div>
+      <div class="elu-meta">${fmt(Number(m.montant))}${m.procedure?' · '+esc(m.procedure):''}${m.date?' · '+esc(String(m.date).slice(0,10)):''}</div>
+    </div>`;
+  }).join('');
+  const html=`
+    <p style="font-size:.72rem;line-height:1.5;color:var(--soft);margin-bottom:12px">Les <strong style="color:var(--text)">marchés publics</strong> sont les contrats passés par la commune avec des entreprises (travaux, fournitures, services). Ils sont déjà comptés dans le budget ci-dessus — cette liste vous montre <strong style="color:var(--text)">qui</strong> a remporté ces contrats.</p>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="kcard" style="flex:1;min-width:80px"><div class="kcard-label">Marchés publiés</div><div class="kcard-value">${list.length}</div></div>
+      <div class="kcard" style="flex:1;min-width:80px"><div class="kcard-label">Montant total</div><div class="kcard-value">${fmt(total)}</div></div>
+    </div>
+    <div class="elu-list">${rows}</div>
+    <p style="font-size:.62rem;color:var(--ghost);margin-top:12px;line-height:1.5">Source : Données Essentielles de la Commande Publique (DECP) · data.economie.gouv.fr — seuls les marchés &gt; 40 000 € sont obligatoirement publiés.</p>`;
+  document.getElementById('drw-color').style.background='#e8874d';
+  document.getElementById('drw-title').textContent='Marchés publics';
+  document.getElementById('drw-amt').textContent=fmt(total);
+  document.getElementById('drw-tabs').innerHTML=`<div class="dtab on" data-id="mp">🧾 Marchés</div>`;
+  document.getElementById('drw-body').innerHTML=`<div class="dtc on" id="dtc-mp">${html}</div>`;
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('overlay').classList.add('on');
+}
+
+// ── Drawer Subventions ────────────────────────────────────
+function openSubvDrawer(){
+  const list=ROOT.subventions||[];
+  if(!list.length)return;
+  const total=list.reduce((a,s)=>a+Number(s.montant),0);
+  const rows=[...list].sort((a,b)=>b.montant-a.montant).map(s=>`
+    <div class="elu-row">
+      <div class="elu-fn">${esc(s.beneficiaire||'—')}</div>
+      <div class="elu-nm">${fmt(Number(s.montant))}</div>
+      <div class="elu-meta">${esc(s.objet||'')}${s.annee?' · '+s.annee:''}</div>
+    </div>`).join('');
+  const html=`
+    <p style="font-size:.72rem;line-height:1.5;color:var(--soft);margin-bottom:12px">Les <strong style="color:var(--text)">subventions</strong> sont les aides versées par la commune aux associations locales (sport, culture, solidarité…). Elles sont déjà comptées dans le budget.</p>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="kcard" style="flex:1;min-width:80px"><div class="kcard-label">Bénéficiaires</div><div class="kcard-value">${list.length}</div></div>
+      <div class="kcard" style="flex:1;min-width:80px"><div class="kcard-label">Montant total</div><div class="kcard-value">${fmt(total)}</div></div>
+    </div>
+    <div class="elu-list">${rows}</div>
+    <p style="font-size:.62rem;color:var(--ghost);margin-top:12px;line-height:1.5">Source : données ouvertes des subventions aux associations · data.gouv.fr.</p>`;
+  document.getElementById('drw-color').style.background='#3ecf8e';
+  document.getElementById('drw-title').textContent='Subventions aux associations';
+  document.getElementById('drw-amt').textContent=fmt(total);
+  document.getElementById('drw-tabs').innerHTML=`<div class="dtab on" data-id="sb">🤝 Subventions</div>`;
+  document.getElementById('drw-body').innerHTML=`<div class="dtc on" id="dtc-sb">${html}</div>`;
+  document.getElementById('drawer').classList.add('on');
+  document.getElementById('overlay').classList.add('on');
+}
+
 function openElusDrawer(){
   const elus=ROOT.elus||[];
   if(!elus.length)return;
@@ -2869,6 +3051,7 @@ function renderComparison(dataB){
 async function loadFranceView(){
   currentCity=null;
   closeDrawer();
+  document.title='TranspaRép — Où va votre argent ?';
   document.getElementById('sp-label').textContent='France';
   document.getElementById('sp-label').classList.remove('has-city');
   document.getElementById('sp-dept').style.display='none';
